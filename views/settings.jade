@@ -1,0 +1,10 @@
+h2 setting
+form(method='post', action='/user', enctype="multipart/form-data")
+  div
+    label nick:
+    input(name='nick', type="text", value=user.nick)
+  div
+    label file:
+    input(name='avatar', type="file")
+  div
+    input(type='submit', value='Save')

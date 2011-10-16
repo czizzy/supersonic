@@ -1,0 +1,15 @@
+body {
+  padding: 50px;
+  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+a {
+  color: #00B7FF;
+}
+
+div.audio-full { background:#ff6600; }
+p.progress { background:#0090d9; width:0; }
+
+span.play { padding:0 11px; background:url(/images/360-button-play.gif) no-repeat scroll 0 0}
+span.pause { padding:0 11px; background:url(/images/360-button-pause.gif) no-repeat scroll 0 0}
+span.stop { padding:0 11px; background:url(/images/360-button-stop.gif) no-repeat scroll 0 0}

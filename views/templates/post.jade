@@ -1,0 +1,12 @@
+script#post-item-template(type="text/html")
+	p
+		a(href='/user/{{username}}') {{usernick}}
+	a(href='/documents/{{id}}/edit') Edit
+	|
+	a.post-delete(href="/post/{{id}}") delete 
+	span.play &nbsp;
+	//audio(controls='controls', src="/audio/{{id}}.{{format}}", type='audio/{{format}}')
+	.audio-full
+		p.progress audio
+	p.text {{text}}
+	p.date {{date}}

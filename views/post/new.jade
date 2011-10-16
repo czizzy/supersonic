@@ -1,0 +1,13 @@
+h2 New Post
+form(method='post', action='/post', enctype="multipart/form-data")
+  div
+    label text:
+      input(name='text', type="text", value=p.text || '')
+    label file:
+    input(name='audio', type="file")
+  div
+    input(type='submit', value='Save')
+
+
+
+

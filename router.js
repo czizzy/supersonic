@@ -1,0 +1,555 @@
+(function() {
+  var Db, GridStore, LoginToken, Server, User, configArgs, fs, model, route, server_config, step;
+  configArgs = require('./config.coffee').config;
+  model = require('./model.coffee');
+  LoginToken = model.LoginToken;
+  User = model.User;
+  step = require('./step.js');
+  GridStore = require('mongodb').GridStore;
+  Db = require('mongodb').Db;
+  Server = require('mongodb').Server;
+  server_config = new Server(configArgs.mongo.host, configArgs.mongo.port, {
+    auto_reconnect: false
+  });
+  fs = require('fs');
+  route = function(app) {
+    var authenticateFromLoginToken, db, getUser, loadUser;
+    db = app.db;
+    authenticateFromLoginToken = function(req, res, next) {
+      var cookie;
+      cookie = JSON.parse(req.cookies.logintoken);
+      console.log('cookie', cookie);
+      return db.loginToken.findById(cookie._id, function(err, token) {
+        if (!token) {
+          return next();
+        }
+        console.log('token', token);
+        token = new LoginToken(token);
+        if (token.series === cookie.series) {
+          if (token.token !== cookie.token) {
+            req.notSafe = true;
+          }
+        } else {
+          res.clearCookie('logintoken');
+          return next();
+        }
+        return db.user.findById(cookie._id, function(err, user) {
+          if (user) {
+            req.session.user_id = user._id;
+            req.currentUser = user;
+            token.token = token.randomToken();
+            return db.loginToken.save(token, function(err) {
+              res.cookie('logintoken', token.cookieValue(), {
+                expires: new Date(Date.now() + 2 * 604800000),
+                path: '/'
+              });
+              return next();
+            });
+          } else {
+            return next();
+          }
+        });
+      });
+    };
+    getUser = function(req, res, next) {
+      if (req.session.user_id != null) {
+        return db.user.findById(req.session.user_id, function(err, user) {
+          console.log('session user', user);
+          if (user != null) {
+            req.currentUser = user;
+            return next();
+          } else {
+            return next();
+          }
+        });
+      } else if (req.cookies.logintoken) {
+        return authenticateFromLoginToken(req, res, next);
+      } else {
+        return next();
+      }
+    };
+    loadUser = function(req, res, next) {
+      console.log('load session', req.session.user_id);
+      console.log('load cookie', req.cookies.logintoken);
+      if (req.form != null) {
+        req.form.complete(function(err, fields, files) {
+          req.form.on('callback', function(fn) {
+            return fn(err, fields, files);
+          });
+          return getUser(req, res, next);
+        });
+        return req.form.on('progress', function(bytesReceived, bytesExpected) {
+          var percent;
+          console.log('on progress');
+          percent = (bytesReceived / bytesExpected * 100) | 0;
+          return process.stdout.write('Uploading: %' + percent + '\r');
+        });
+      } else {
+        return getUser(req, res, next);
+      }
+    };
+    app.get('/', loadUser, function(req, res) {
+      var count, feeds;
+      if (req.currentUser) {
+        feeds = [];
+        count = 0;
+        req.currentUser.following.push(req.currentUser._id.toString());
+        return req.currentUser.following.forEach(function(item, index, list) {
+          return db.user.findById(item, function(err, user) {
+            return db.post.findItems({
+              u_id: user._id
+            }, {
+              limit: 20,
+              skip: 0
+            }, function(err, posts) {
+              posts.forEach(function(post) {
+                post.user = user;
+                return feeds.push(post);
+              });
+              count++;
+              if (count === list.length) {
+                feeds.sort(function(a, b) {
+                  return b.date.getTime() - a.date.getTime();
+                });
+                console.log('finish', feeds);
+                return res.render('home', {
+                  title: 'home',
+                  posts: feeds.slice(0, 21),
+                  user: req.currentUser
+                });
+              }
+            });
+          });
+        });
+      } else {
+        return res.render('index', {
+          title: 'SuperSonic'
+        });
+      }
+    });
+    app.get('/signup', loadUser, function(req, res) {
+      if (req.currentUser) {
+        return res.redirect('/');
+      } else {
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+    });
+    app.post('/signup', function(req, res) {
+      var _user;
+      _user = new User(req.body.user);
+      return db.user.insert(_user, {
+        safe: true
+      }, function(err, replies) {
+        if (err != null) {
+          return res.render('signup', {
+            title: 'signup',
+            error: err
+          });
+        } else {
+          req.session.user_id = replies[0]._id;
+          return res.redirect('/');
+        }
+      });
+    });
+    app.post('/login', function(req, res) {
+      var _user;
+      _user = req.body.user;
+      return db.user.findOne({
+        username: _user.username
+      }, function(err, user) {
+        var loginToken;
+        if (user != null) {
+          user = new User(user);
+          if (user.authenticate(_user.password)) {
+            req.session.user_id = user._id;
+            if (req.body.remember_me) {
+              loginToken = new LoginToken({
+                _id: user._id
+              });
+              console.log(loginToken);
+              db.loginToken.save(loginToken, function(err, count) {
+                return res.cookie('logintoken', loginToken.cookieValue(), {
+                  expires: new Date(Date.now() + 2 * 604800000),
+                  path: '/'
+                });
+              });
+            }
+            return res.redirect('/');
+          } else {
+            req.flash('error', 'Incorrect credentials');
+            return res.redirect('/');
+          }
+        } else {
+          req.flash('error', ['Incorrect credentials', 'no such user']);
+          return res.redirect('/');
+        }
+      });
+    });
+    app.get('/logout', loadUser, function(req, res) {
+      if (req.session != null) {
+        db.loginToken.removeById(req.session.user_id, function() {
+          res.clearCookie('logintoken');
+          return req.session.destroy();
+        });
+      }
+      return res.redirect('/');
+    });
+    app.get('/post/new', loadUser, function(req, res) {
+      if (req.currentUser) {
+        return res.render('post/new', {
+          title: 'new post',
+          p: {}
+        });
+      } else {
+        return res.redirect('/');
+      }
+    });
+    app.get('/settings', loadUser, function(req, res) {
+      if (req.currentUser) {
+        return res.render('settings', {
+          title: 'settings',
+          user: req.currentUser
+        });
+      } else {
+        return res.redirect('/');
+      }
+    });
+    app.post('/user', loadUser, function(req, res) {
+      var _user;
+      if (req.currentUser) {
+        _user = req.currentUser;
+        return req.form.emit('callback', function(err, fields, files) {
+          var db1;
+          if (err) {
+            return console.log(err);
+          } else {
+            console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
+            console.log('fields', fields);
+            if (fields.nick) {
+              db.user.updateById(_user._id.toString(), {
+                '$set': {
+                  nick: fields.nick
+                }
+              });
+            }
+            db1 = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
+              auto_reconnect: false
+            }));
+            return db1.open(function(err, db1) {
+              return db1.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
+                var gridStore;
+                gridStore = new GridStore(db1, _user._id.toString(), "w", {
+                  'content_type': 'image/jpeg',
+                  'root': 'avatar'
+                });
+                gridStore.open(function(err, gridStore) {
+                  console.log('open err', err);
+                  return gridStore.writeFile(files.avatar.path, function(err, result) {
+                    console.log('write err', err);
+                    return gridStore.close(function(err, result) {
+                      db1.close();
+                      return fs.unlink(files.avatar.path, function(err) {
+                        if (err) {
+                          console.log(err);
+                        }
+                        return console.log('successfully deleted %s', files.avatar.path);
+                      });
+                    });
+                  });
+                });
+                return res.redirect('/');
+              });
+            });
+          }
+        });
+      } else {
+        return res.redirect('/');
+      }
+    });
+    app.get('/user/:username', loadUser, function(req, res) {
+      return db.user.findOne({
+        username: req.params.username
+      }, function(err, user) {
+        var localData;
+        if (user) {
+          localData = {
+            title: user.nick + "'s page",
+            user: user,
+            isLoggedIn: false
+          };
+          if (req.currentUser) {
+            user.isSelf = req.currentUser.username === user.username;
+            user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
+            localData.currentUser = req.currentUser;
+            localData.isLoggedIn = true;
+            return db.post.findItems({
+              u_id: user._id
+            }, {
+              limit: 10,
+              skip: 0
+            }, function(err, posts) {
+              posts.forEach(function(post) {
+                return post.user = user;
+              });
+              localData.posts = posts;
+              return res.render('user', localData);
+            });
+          } else {
+            return res.render('user', localData);
+          }
+        } else {
+          return res.send(err);
+        }
+      });
+    });
+    app.put('/follow/:id', loadUser, function(req, res) {
+      var currentUser;
+      if (req.currentUser) {
+        currentUser = req.currentUser;
+        return db.user.findById(req.params.id, function(err, user) {
+          if (user) {
+            console.log('follow user', user);
+            return db.user.update({
+              _id: currentUser._id,
+              following: {
+                $ne: user._id.toString()
+              }
+            }, {
+              $push: {
+                'following': user._id.toString()
+              },
+              $inc: {
+                num_following: 1
+              }
+            }, {
+              safe: true
+            }, function(err, count) {
+              console.log('following err', err);
+              console.log('following count', count);
+              return db.user.update({
+                _id: user._id,
+                follower: {
+                  $ne: currentUser._id.toString()
+                }
+              }, {
+                $push: {
+                  'follower': currentUser._id.toString()
+                },
+                '$inc': {
+                  num_follower: 1
+                }
+              }, {
+                safe: true
+              }, function(err, count) {
+                console.log('follower count', count);
+                console.log('follower err', err);
+                return res.send('success');
+              });
+            });
+          } else {
+            return res.send('error');
+          }
+        });
+      } else {
+        return res.send('error');
+      }
+    });
+    app.put('/unfollow/:id', loadUser, function(req, res) {
+      var currentUser;
+      if (req.currentUser) {
+        currentUser = req.currentUser;
+        return db.user.findById(req.params.id, function(err, user) {
+          if (user) {
+            console.log('unfollow user', user);
+            return db.user.update({
+              _id: currentUser._id,
+              following: user._id.toString()
+            }, {
+              $pull: {
+                'following': user._id.toString()
+              },
+              $inc: {
+                num_following: -1
+              }
+            }, {
+              safe: true
+            }, function(err, count) {
+              console.log('unfollowing err', err);
+              console.log('unfollowing count', count);
+              return db.user.update({
+                _id: user._id,
+                follower: currentUser._id.toString()
+              }, {
+                $pull: {
+                  'follower': currentUser._id.toString()
+                },
+                '$inc': {
+                  num_follower: -1
+                }
+              }, {
+                safe: true
+              }, function(err, count) {
+                console.log('follower count', count);
+                console.log('follower err', err);
+                return res.send('success');
+              });
+            });
+          } else {
+            return res.send('error');
+          }
+        });
+      } else {
+        return res.send('error');
+      }
+    });
+    app.post('/post', loadUser, function(req, res) {
+      var _user;
+      if (req.currentUser) {
+        _user = req.currentUser;
+        return req.form.emit('callback', function(err, fields, files) {
+          var format, formats, post;
+          if (err) {
+            return console.log(err);
+          } else {
+            console.log('file', files);
+            console.log('\nuploaded %s to %s', files.audio.filename, files.audio.path);
+            format = files.audio.filename.substr(files.audio.filename.lastIndexOf('.') + 1);
+            console.log('format', format);
+            formats = ['mp3', 'wav', 'ogg', 'mp4'];
+            if (formats.indexOf(format) === -1) {
+              return res.redirect('back');
+            }
+            post = {
+              text: fields.text,
+              u_id: _user._id,
+              format: format,
+              time: 52846,
+              date: new Date()
+            };
+            return db.post.insert(post, function(err, replies) {
+              var db1;
+              console.log('saved post', replies);
+              db.user.updateById(post.u_id.toString(), {
+                '$inc': {
+                  num_posts: 1
+                }
+              });
+              db1 = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
+                auto_reconnect: false
+              }));
+              return db1.open(function(err, db1) {
+                return db1.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
+                  var gridStore;
+                  console.log('err', err);
+                  gridStore = new GridStore(db1, replies[0]._id.toString(), "w", {
+                    'content_type': 'audio/' + format,
+                    'root': 'audio',
+                    metadata: {
+                      format: format
+                    }
+                  });
+                  return gridStore.open(function(err, gridStore) {
+                    console.log('open err', err);
+                    return gridStore.writeFile(files.audio.path, function(err, result) {
+                      console.log('write err', err);
+                      gridStore.close(function(err, result) {
+                        db1.close();
+                        return fs.unlink(files.audio.path, function(err) {
+                          if (err) {
+                            console.log(err);
+                          }
+                          return console.log('successfully deleted %s', files.audio.path);
+                        });
+                      });
+                      return res.redirect('/');
+                    });
+                  });
+                });
+              });
+            });
+          }
+        });
+      } else {
+        return res.redirect('/');
+      }
+    });
+    app.del('/post/:id.:format?', loadUser, function(req, res) {
+      return db.post.removeById(req.params.id, function(err, p) {
+        var griddb;
+        db.user.updateById(req.currentUser._id, {
+          '$inc': {
+            num_posts: -1
+          }
+        });
+        griddb = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
+          auto_reconnect: false
+        }));
+        griddb.open(function(err, griddb) {
+          return GridStore.unlink(griddb, req.params.id, {
+            'content_type': 'audio/mpeg',
+            'root': 'audio'
+          }, function(err, content) {
+            console.log('err', err);
+            return griddb.close();
+          });
+        });
+        return res.send('1');
+      });
+    });
+    app.get('/audio/:id.:format', function(req, res) {
+      var griddb;
+      griddb = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
+        auto_reconnect: false
+      }));
+      return griddb.open(function(err, griddb) {
+        var gridStore;
+        gridStore = new GridStore(griddb, req.params.id, "r", {
+          'content_type': 'audio/mpeg',
+          'root': 'audio'
+        });
+        return gridStore.open(function(err, gridStore) {
+          var fileStream;
+          res.contentType('audio/' + req.params.format);
+          fileStream = gridStore.stream(true);
+          fileStream.on('error', function(error) {
+            return console.log('error', error);
+          });
+          fileStream.on('end', function(end) {
+            console.log('end');
+            return griddb.close();
+          });
+          return fileStream.pipe(res);
+        });
+      });
+    });
+    return app.get('/avatar/:id', function(req, res) {
+      var griddb;
+      griddb = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
+        auto_reconnect: false
+      }));
+      return griddb.open(function(err, griddb) {
+        var gridStore;
+        gridStore = new GridStore(griddb, req.params.id, "r", {
+          'content_type': 'image/jpeg',
+          'root': 'avatar'
+        });
+        return gridStore.open(function(err, gridStore) {
+          var fileStream;
+          res.contentType('image/jpeg');
+          fileStream = gridStore.stream(true);
+          fileStream.on('error', function(error) {
+            return console.log('error', error);
+          });
+          fileStream.on('end', function(end) {
+            console.log('end');
+            return griddb.close();
+          });
+          return fileStream.pipe(res);
+        });
+      });
+    });
+  };
+  exports.route = route;
+}).call(this);

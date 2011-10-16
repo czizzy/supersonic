@@ -1,0 +1,18 @@
+h2 New User
+form(method='post', action='/signup')
+	div
+		label username:
+			input(name='user[username]')
+	div
+		label email:
+			input(name='user[email]')
+	div
+		label password:
+			input(type='password', name='user[password]')
+	div
+			label comfirm password:
+			input(type='password', name='user[comfirm_password]')
+	div
+		input(type='submit', value='Save')
+- if (typeof(error) !== 'undefined')
+	p #{error}
