@@ -4,9 +4,9 @@
       dbname: 'supersonic',
       host: 'localhost',
       port: 27017,
-      account: '',
-      password: ''
+      account: 'cequa39aqu4j0',
+      password: '2r01a5ox45o'
     },
-    port: 3000
+    port: 20088
   };
 }).call(this);

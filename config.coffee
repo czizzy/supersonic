@@ -3,6 +3,6 @@ exports.config =
         dbname: 'supersonic'
         host: 'localhost'
         port: 27017,
-        account: '',
-        password: ''
-    port: 3000
+        account: 'cequa39aqu4j0',
+        password: '2r01a5ox45o'
+    port: 20088
