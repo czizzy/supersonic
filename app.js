@@ -29,7 +29,7 @@
       store: new mongoStore({
         server_config: server_config,
         repeatInterval: 3000,
-        dbname: 'supersonic'
+        dbname: configArgs.mongo.dbname
       }),
       secret: 'supersonic'
     }));

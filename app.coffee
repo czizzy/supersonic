@@ -27,7 +27,7 @@ app.configure () ->
     app.use express.bodyParser()
     app.use express.cookieParser()
     app.use form({keepExtensions: true})
-    app.use express.session {store: new mongoStore({server_config: server_config, repeatInterval: 3000, dbname:'supersonic'}), secret: 'supersonic'}
+    app.use express.session {store: new mongoStore({server_config: server_config, repeatInterval: 3000, dbname:configArgs.mongo.dbname}), secret: 'supersonic'}
     #app.use express.session {store: new mongoStore({db:db.db, repeatInterval: 3000}), secret: 'supersonic'}
     app.use(express.methodOverride())
     app.use(app.router)
