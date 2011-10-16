@@ -1,6 +1,6 @@
 exports.config =
     mongo:
-        dbname: 'supersonic'
+        dbname: 'kmmvqn09zzrch'
         host: 'localhost'
         port: 27017,
         account: 'cequa39aqu4j0',
