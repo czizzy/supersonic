@@ -1,10 +1,9 @@
 (function() {
-  var Db, GridStore, LoginToken, Server, User, configArgs, fs, model, route, server_config, step;
-  configArgs = require('./config.coffee').config;
-  model = require('./model.coffee');
+  var Db, GridStore, LoginToken, Server, User, configArgs, fs, model, route, server_config;
+  configArgs = require('./config.js').config;
+  model = require('./model.js');
   LoginToken = model.LoginToken;
   User = model.User;
-  step = require('./step.js');
   GridStore = require('mongodb').GridStore;
   Db = require('mongodb').Db;
   Server = require('mongodb').Server;
@@ -94,6 +93,7 @@
         feeds = [];
         count = 0;
         req.currentUser.following.push(req.currentUser._id.toString());
+        console.log('following', req.currentUser.following);
         return req.currentUser.following.forEach(function(item, index, list) {
           return db.user.findById(item, function(err, user) {
             return db.post.findItems({
@@ -108,15 +108,34 @@
               });
               count++;
               if (count === list.length) {
+                count = 0;
                 feeds.sort(function(a, b) {
                   return b.date.getTime() - a.date.getTime();
                 });
-                console.log('finish', feeds);
-                return res.render('home', {
-                  title: 'home',
-                  posts: feeds.slice(0, 21),
-                  user: req.currentUser
-                });
+                if (feeds.length) {
+                  return feeds.forEach(function(feed, index, list) {
+                    return db.comment.findItems({
+                      p_id: feed._id
+                    }, function(err, comments) {
+                      feed.comments = comments;
+                      count++;
+                      if (count === list.length) {
+                        console.log('finish', feeds);
+                        return res.render('home', {
+                          title: 'home',
+                          posts: feeds.slice(0, 21),
+                          user: req.currentUser
+                        });
+                      }
+                    });
+                  });
+                } else {
+                  return res.render('home', {
+                    title: 'home',
+                    posts: [],
+                    user: req.currentUser
+                  });
+                }
               }
             });
           });
@@ -128,34 +147,19 @@
       }
     });
     app.get('/signup', loadUser, function(req, res) {
-      if (req.currentUser) {
-        return res.redirect('/');
-      } else {
-        return res.render('signup', {
-          title: 'signup'
-        });
-      }
-    });
-    app.post('/signup', function(req, res) {
-      var _user;
-      _user = new User(req.body.user);
-      return db.user.insert(_user, {
-        safe: true
-      }, function(err, replies) {
-        if (err != null) {
-          return res.render('signup', {
-            title: 'signup',
-            error: err
-          });
-        } else {
-          req.session.user_id = replies[0]._id;
-          return res.redirect('/');
-        }
-      });
+      return res.send('please wait');
     });
     app.post('/login', function(req, res) {
       var _user;
       _user = req.body.user;
+      _user.password = _user.password.trim();
+      _user.username = _user.username.trim();
+      if (_user.password === '' || _user.username === '') {
+        req.flash('error', '字段不能为空');
+        return res.render('index', {
+          title: 'index'
+        });
+      }
       return db.user.findOne({
         username: _user.username
       }, function(err, user) {
@@ -178,11 +182,11 @@
             }
             return res.redirect('/');
           } else {
-            req.flash('error', 'Incorrect credentials');
+            req.flash('error', '用户名与密码不匹配');
             return res.redirect('/');
           }
         } else {
-          req.flash('error', ['Incorrect credentials', 'no such user']);
+          req.flash('error', '没有这个用户');
           return res.redirect('/');
         }
       });
@@ -404,6 +408,24 @@
         return res.send('error');
       }
     });
+    app.post('/comment', loadUser, function(req, res) {
+      var comment, _user;
+      _user = req.currentUser;
+      comment = {
+        p_id: db.comment.id(req.body.id),
+        body: req.body.body,
+        time: req.body.time,
+        date: new Date(),
+        u: {
+          _id: _user._id,
+          username: _user.username
+        }
+      };
+      return db.comment.insert(comment, function(err, replies) {
+        console.log(replies[0]);
+        return res.send(replies[0]);
+      });
+    });
     app.post('/post', loadUser, function(req, res) {
       var _user;
       if (req.currentUser) {
@@ -478,7 +500,12 @@
     app.del('/post/:id.:format?', loadUser, function(req, res) {
       return db.post.removeById(req.params.id, function(err, p) {
         var griddb;
-        db.user.updateById(req.currentUser._id, {
+        db.comment.remove({
+          p_id: db.comment.id(req.params.id)
+        }, function(err, comment) {
+          return console.log('delete comment', comment);
+        });
+        db.user.updateById(req.currentUser._id.toString(), {
           '$inc': {
             num_posts: -1
           }

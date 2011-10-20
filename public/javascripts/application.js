@@ -1,8 +1,8 @@
 $(function(){
 	Backbone.emulateHTTP = true;
-	_.templateSettings = {
-	    interpolate : /\{\{(.+?)\}\}/g
-	};
+	// _.templateSettings = {
+	//     interpolate : /\{\{(.+?)\}\}/g
+	// };
 	var Post = Backbone.Model.extend({
 		initialize: function(p){
 			var model = this;
@@ -51,6 +51,7 @@ $(function(){
 				volume: 80
 			})});
 			model.set({'listeners': {}});
+			model.set({'showSec': null});
 			console.log('model', this);
 		},
 		addListener: function(method, func){
@@ -72,17 +73,56 @@ $(function(){
 			'click a.post-delete': 'remove',
 			'click span.play': 'play',
 			'click span.pause': 'pause',
-			'click div.audio-full': 'setPosition'
+			'click div.audio-full': 'setPosition',
+			'click div.comment-bar': 'comment'
 		},
 		initialize: function(){
 			_.bindAll(this, 'unrender', 'remove');
 			var _model = this.model, _view = this, _length = _model.get('time');
 			_model.bind('remove', this.unrender);
-			
 			_model.addListener('whileplaying', function(audio){
 				//console.log('sound '+audio.sID+' playing, '+audio.position+' of '+audio.duration);	
 				var _progress = audio.position/_length*100;
 				$(_view.el).find('p.progress').css('width', _progress+'%');
+				var nowSec = parseInt(audio.position/1000);
+				var showComments = _.select(_model.get('comments'), function(comment){
+					return parseInt(comment.time/1000) == nowSec;
+				});
+				if(showComments.length){
+					if(_model.get('showSec') !== nowSec){
+						var $bar = $(_view.el).find('div.audio-full');
+						_model.set({showSec: nowSec});
+						var commentsStr = '';
+						_.each(showComments, function(item, index, list){
+							commentsStr += '<div>';
+							commentsStr += ('<p>'+item.body+'</p>');
+							commentsStr += ('<p>'+item.u.username+'</p>');
+							commentsStr += ('<p>'+item.date+'</p>');
+							commentsStr += '</div>';
+						});
+						var $dialog = $('<div class="comment-show-dialog">'+commentsStr+'<a class="cancel" href="javascript:void(0);">cancel</a></p></div>'), removeInt;
+						$dialog.css({
+							"top":($bar.height()+7)+"px",
+							"left":_progress+"%"
+						});
+						$dialog.click(function(e){
+							e.stopPropagation();
+						});
+						$dialog.delegate('a.cancel', 'click', function(){
+							clearTimeout(removeInt);
+							removeInt = null;
+							$dialog.remove();
+						});
+						removeInt = setTimeout(function(){
+							$dialog.remove();
+						}, 1000);
+						$bar.append($dialog);
+						console.log($dialog);
+						console.log($bar);
+					}
+				} else if(_model.get('showSec') !== null){
+					_model.set({showSec: null});
+				}
 			});
 			_model.addListener('onfinish', function(audio){
 				//console.log('sound '+audio.sID+' playing, '+audio.position+' of '+audio.duration);	
@@ -110,7 +150,9 @@ $(function(){
 				text: this.model.get('text'),
 				username: this.model.get('user').username,
 				usernick: this.model.get('user').nick,
-				date: this.model.get('date')
+				date: this.model.get('date'),
+				comments: this.model.get('comments'),
+				time: this.model.get('time')
 			}));
 			return this;
 		},
@@ -129,12 +171,36 @@ $(function(){
 			this.model.get('audio').pause();
 		},
 		setPosition: function(e){
-			console.log(e);
-			console.log($(e.currentTarget).offset());
-			console.log($(e.currentTarget).width());
 			var $div = $(e.currentTarget), position = (e.clientX-$div.offset().left) / $div.width();
 			console.log(position, position*this.model.get('time'));
 			this.model.get('audio').setPosition(position*this.model.get('time'));
+		},
+		comment: function(e){
+			console.log(e.currentTarget);
+			var $bar = $(e.currentTarget), offset = $bar.offset() , position = (e.clientX-offset.left) / $bar.width();
+			var model = this.model, fullTime = model.get('time'), time = parseInt(position*fullTime), timeStr = second2Time(time/1000);
+			$bar.find('div.comment-dialog').remove();
+			var $dialog = $('<div class="comment-dialog"><p>@' + timeStr + '</p><textarea></textarea><p><input type="button" value="submit" class="submit" data-id="'+model.get('_id')+'"/><a class="cancel" href="javascript:void(0);">cancel</a></p></div>');
+			$dialog.css({
+				"top":($bar.height()+7)+"px",
+				"left":(e.clientX-offset.left)+"px"
+			});
+			$dialog.click(function(e){
+				e.stopPropagation();
+			});
+			$dialog.delegate('a.cancel', 'click', function(){
+				$dialog.remove();
+			});
+			$dialog.delegate('input.submit', 'click', function(){
+				var $this = $(this);
+				$.post('/comment', {id: $this.attr('data-id'), body: $dialog.find('textarea').val(), time: time}, function(res){
+					console.log(res);
+					model.get('comments').push(res);		
+					$bar.find('ul').append('<li data-id="'+res._id+'" style="left:' + (res.time/fullTime*100) + '%" data-body="'+res.body+'"><img src="/avatar/'+res.u._id+'" width="20" height="20" /></li>');
+				});
+				$dialog.remove();
+			});
+			$bar.append($dialog);
 		}
 	});
 	var PostListView = Backbone.View.extend({
@@ -170,6 +236,15 @@ $(function(){
 	});
 
 });
+
+function second2Time(time){
+	var hours = parseInt(time/3600), timeInHour = parseInt(time%3600), minutes = parseInt(timeInHour/60), seconds = parseInt(timeInHour%60);
+	var timeStr = '';
+	if(hours) timeStr += (hours + ':');
+	timeStr += (minutes + ':');
+	timeStr += seconds;
+	return timeStr;
+}
 
 // $.getScript("/javascripts/soundmanager2.js", function(data, status) {
 // 		//console.log(data, status);

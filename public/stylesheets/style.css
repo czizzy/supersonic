@@ -7,9 +7,16 @@ a {
   color: #00B7FF;
 }
 
-div.audio-full { background:#ff6600; }
+div.audio-full { background:#ff6600; position:relative; }
 p.progress { background:#0090d9; width:0; }
 
-span.play { padding:0 11px; background:url(/images/360-button-play.gif) no-repeat scroll 0 0}
-span.pause { padding:0 11px; background:url(/images/360-button-pause.gif) no-repeat scroll 0 0}
-span.stop { padding:0 11px; background:url(/images/360-button-stop.gif) no-repeat scroll 0 0}
+span.play { padding:0 11px; background:url(/images/360-button-play.gif) no-repeat scroll 0 0;}
+span.pause { padding:0 11px; background:url(/images/360-button-pause.gif) no-repeat scroll 0 0;}
+span.stop { padding:0 11px; background:url(/images/360-button-stop.gif) no-repeat scroll 0 0;}
+.comment-bar { position:relative; background: #ddd; }
+.comment-bar li { display:inline; position:absolute; }
+div.comment-dialog { position:absolute; background:#222; opacity:0.8; }
+div.comment-show-dialog { position:absolute; background:#222; opacity:0.8; color:#fff; }
+
+.verify-form span.col-help { padding-left: 15px; color: #aaa; background: #fff url(/images/reg-arrow.gif) 5px 5px no-repeat; }
+.verify-form span.col-error { padding-left: 15px; color: #f00; background: #fff url(/images/reg-arrow.gif) 5px -34px no-repeat; }

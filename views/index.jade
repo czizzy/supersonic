@@ -1,16 +1,23 @@
-h1= title
-p Welcome to #{title}
-h2 Login
-form(method='post', action='/login')
-	div
-		label name:
-			input(name='user[username]')
-	div
-		label password:
-			input(type='password', name='user[password]')
-	div
-		label(for='remember_me') Remember me:
-		input#remember_me(type='checkbox', name='remember_me')
-	div
-		input(type='submit', value='Login')
-		a(href='/signup') Register
+extends body
+block body
+	h1= title
+	p Welcome to #{title}
+	h2 Login
+	form.verify-form(method='post', action='/login')
+		div
+			label name:
+				input#username(name='user[username]', required)
+				span
+		div
+			label password:
+				input#password(type='password', name='user[password]', required)
+				span
+		div
+			label(for='remember_me') Remember me:
+			input#remember_me(type='checkbox', name='remember_me', checked)
+		div
+			input(type='submit', value='Login')
+			a(href='/signup') Register
+
+block scripts
+	script(type='text/javascript')

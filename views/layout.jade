@@ -4,5 +4,5 @@ html
     title= title
     link(rel='stylesheet', href='/stylesheets/style.css')
   body
-    #container
-      != body
+    !{flashMessages}
+    != body

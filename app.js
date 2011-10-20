@@ -1,14 +1,17 @@
 (function() {
-  var Server, app, configArgs, db, express, form, mongo, mongoStore, router, server_config, sys;
-  configArgs = require('./config.coffee').config;
+  var Server, api, app, configArgs, db, express, form, mongo, mongoStore, router, server_config, sys;
+  configArgs = require('./config.js').config;
   express = require('express');
   form = require('connect-form');
-  router = require('./router.coffee');
+  router = require('./router.js');
   mongo = require('mongoskin');
   mongoStore = require('connect-mongodb');
   Server = require('mongodb').Server;
   app = module.exports = express.createServer();
   sys = require('sys');
+  api = require('./api.js');
+  app.helpers(require('./helpers.js').helpers);
+  app.dynamicHelpers(require('./helpers.js').dynamicHelpers);
   if (configArgs.mongo.account) {
     app.db = db = configArgs.mongo.account + ':' + configArgs.mongo.password + '@' + mongo.db(configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect');
   } else {
@@ -35,37 +38,9 @@
     }));
     app.use(express.methodOverride());
     app.use(app.router);
-    return app.use(express.static(__dirname + '/public'));
-  });
-  app.configure('development', function() {
-    return app.use(express.errorHandler({
-      dumpExceptions: true,
-      showStack: true
-    }));
-  });
-  app.configure('production', function() {
-    var NotFound;
-    NotFound = (function() {
-      function NotFound(msg) {
-        this.name = 'NotFound';
-        Error.call(this, msg);
-        Error.captureStacktrace(this, arguments.callee);
-      }
-      return NotFound;
-    })();
-    sys.inherits(NotFound, Error);
-    app.error(function(err, req, res, next) {
-      console.log('err', err);
-      if (err instanceof NotFound) {
-        return res.render('404.jade', {
-          status: 404,
-          title: '404'
-        });
-      } else {
-        return next(err);
-      }
-    });
-    return app.error(function(err, req, res) {
+    app.use(express.static(__dirname + '/public'));
+    return app.use(function(err, req, res, next) {
+      console.log('handle err', err);
       return res.render('500.jade', {
         status: 500,
         locals: {
@@ -75,16 +50,34 @@
       });
     });
   });
+  app.configure('development', function() {
+    return app.use(express.errorHandler({
+      dumpExceptions: true,
+      showStack: true
+    }));
+  });
+  app.configure('production', function() {});
   db.bind('user');
   db.bind('loginToken');
   db.bind('post');
-  db.bind('feed');
+  db.bind('comment');
   db.user.ensureIndex({
     'username': 1
   }, true, function(err) {
     return console.log('index err', err);
   });
+  db.comment.ensureIndex({
+    'p_id': 1
+  }, false, function(err) {
+    return console.log('index err', err);
+  });
+  db.post.ensureIndex({
+    'u_id': 1
+  }, false, function(err) {
+    return console.log('index err', err);
+  });
   router.route(app);
+  api.start(app);
   app.listen(configArgs.port);
   console.log("Express server listening on port %d in %s mode", app.address().port, app.settings.env);
 }).call(this);
