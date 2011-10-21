@@ -1,0 +1,29 @@
+header 
+	#header-inner
+		#header-content 
+			h1#logo SuperSonic
+			div#utilities 
+				ul
+					- if (typeof user !== 'undefined')
+						li 
+							a(href="/user/#{user.username}")#{user.nick}
+						li 
+							a(href="/settings") 设置
+						li
+							a(href="/logout") 登出
+					- else 
+						li
+							a(href="/signup") 注册
+nav
+	#navigator
+		ul
+			li(class=(typeof navLink !== 'undefined' && navLink == 'home')?'active':'')
+				a(href="/")
+					span 首页
+			- if (typeof user !== 'undefined')
+				li(class=(typeof navLink !== 'undefined' && navLink == 'user')?'active':'')
+					a(href="/user/#{user.username}")
+						span 个人主页
+			li(class=(typeof navLink !== 'undefined' && navLink == 'explore')?'active':'')
+				a(href="/explore')
+						span 发现
