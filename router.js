@@ -150,66 +150,7 @@
       }
     });
     app.get('/signup', loadUser, function(req, res) {
-      if (req.currentUser) {
-        return res.redirect('/');
-      } else {
-        return res.render('signup', {
-          title: 'signup'
-        });
-      }
-    });
-    app.post('/signup', function(req, res, next) {
-      var testReg, _user;
-      _user = req.body.user;
-      _user.password = _user.password.trim();
-      _user.confirm_password = _user.confirm_password.trim();
-      _user.username = _user.username.trim();
-      _user.email = _user.email.trim();
-      console.log(_user);
-      if (_user.password === '' || _user.confirm_password === '' || _user.username === '' || _user.email === '') {
-        req.flash('error', '字段不能为空');
-        return res.render('signup', {
-          title: 'signup'
-        });
-      }
-      if (_user.password.length < 6) {
-        req.flash('error', '密码不能少于六位');
-        return res.render('signup', {
-          title: 'signup'
-        });
-      }
-      if (_user.password !== _user.confirm_password) {
-        req.flash('error', '确认密码与密码不同');
-        return res.render('signup', {
-          title: 'signup'
-        });
-      }
-      testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/;
-      if (!testReg.test(_user.email)) {
-        req.flash('error', '邮箱格式不正确');
-        return res.render('signup', {
-          title: 'signup'
-        });
-      }
-      _user = new User(_user);
-      return db.user.insert(_user, {
-        safe: true
-      }, function(err, replies) {
-        if (err != null) {
-          if (err.code === 11000) {
-            req.flash('error', '用户名已存在');
-            return res.render('signup', {
-              title: 'signup'
-            });
-          } else {
-            return next(err);
-          }
-        } else {
-          console.log('signup', replies);
-          req.session.user_id = replies[0]._id;
-          return res.redirect('/');
-        }
-      });
+      return res.send('please wait');
     });
     app.post('/login', function(req, res) {
       var _user;
