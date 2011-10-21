@@ -338,18 +338,19 @@ route = (app) ->
     app.get '/audio/:id.:format', (req, res) ->
         griddb = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
         griddb.open (err, griddb) ->
-            gridStore = new GridStore griddb, req.params.id, "r", { 'content_type':'audio/mpeg', 'root':'audio',  }
-            gridStore.open (err, gridStore) ->
-                res.contentType 'audio/'+req.params.format
-                fileStream = gridStore.stream(true)
-                # fileStream.on 'data', (data) ->
-                #     console.log 'data', data
-                fileStream.on 'error', (error) ->
-                    console.log 'error', error
-                fileStream.on 'end', (end) ->
-                    console.log 'end'
-                    griddb.close()
-                fileStream.pipe(res)
+            griddb.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
+                gridStore = new GridStore griddb, req.params.id, "r", { 'content_type':'audio/mpeg', 'root':'audio',  }
+                gridStore.open (err, gridStore) ->
+                    res.contentType 'audio/'+req.params.format
+                    fileStream = gridStore.stream(true)
+                    # fileStream.on 'data', (data) ->
+                    #     console.log 'data', data
+                    fileStream.on 'error', (error) ->
+                        console.log 'error', error
+                    fileStream.on 'end', (end) ->
+                        console.log 'end'
+                        griddb.close()
+                    fileStream.pipe(res)
             # GridStore.read griddb, req.params.id, (err, content) ->
             #     console.log 'err', err
             #     res.contentType 'audio/mpeg'
@@ -360,17 +361,18 @@ route = (app) ->
     app.get '/avatar/:id', (req, res) ->
         griddb = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
         griddb.open (err, griddb) ->
-            gridStore = new GridStore griddb, req.params.id, "r", { 'content_type':'image/jpeg', 'root':'avatar' }
-            gridStore.open (err, gridStore) ->
-                res.contentType 'image/jpeg'
-                fileStream = gridStore.stream(true)
-                # fileStream.on 'data', (data) ->
-                #     console.log 'data', data
-                fileStream.on 'error', (error) ->
-                    console.log 'error', error
-                fileStream.on 'end', (end) ->
-                    console.log 'end'
-                    griddb.close()
-                fileStream.pipe(res)
+            griddb.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
+                gridStore = new GridStore griddb, req.params.id, "r", { 'content_type':'image/jpeg', 'root':'avatar' }
+                gridStore.open (err, gridStore) ->
+                    res.contentType 'image/jpeg'
+                    fileStream = gridStore.stream(true)
+                    # fileStream.on 'data', (data) ->
+                    #     console.log 'data', data
+                    fileStream.on 'error', (error) ->
+                        console.log 'error', error
+                    fileStream.on 'end', (end) ->
+                        console.log 'end'
+                        griddb.close()
+                    fileStream.pipe(res)
 
 exports.route = route

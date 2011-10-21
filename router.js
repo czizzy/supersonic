@@ -596,23 +596,25 @@
         auto_reconnect: false
       }));
       return griddb.open(function(err, griddb) {
-        var gridStore;
-        gridStore = new GridStore(griddb, req.params.id, "r", {
-          'content_type': 'audio/mpeg',
-          'root': 'audio'
-        });
-        return gridStore.open(function(err, gridStore) {
-          var fileStream;
-          res.contentType('audio/' + req.params.format);
-          fileStream = gridStore.stream(true);
-          fileStream.on('error', function(error) {
-            return console.log('error', error);
+        return griddb.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
+          var gridStore;
+          gridStore = new GridStore(griddb, req.params.id, "r", {
+            'content_type': 'audio/mpeg',
+            'root': 'audio'
           });
-          fileStream.on('end', function(end) {
-            console.log('end');
-            return griddb.close();
+          return gridStore.open(function(err, gridStore) {
+            var fileStream;
+            res.contentType('audio/' + req.params.format);
+            fileStream = gridStore.stream(true);
+            fileStream.on('error', function(error) {
+              return console.log('error', error);
+            });
+            fileStream.on('end', function(end) {
+              console.log('end');
+              return griddb.close();
+            });
+            return fileStream.pipe(res);
           });
-          return fileStream.pipe(res);
         });
       });
     });
@@ -622,23 +624,25 @@
         auto_reconnect: false
       }));
       return griddb.open(function(err, griddb) {
-        var gridStore;
-        gridStore = new GridStore(griddb, req.params.id, "r", {
-          'content_type': 'image/jpeg',
-          'root': 'avatar'
-        });
-        return gridStore.open(function(err, gridStore) {
-          var fileStream;
-          res.contentType('image/jpeg');
-          fileStream = gridStore.stream(true);
-          fileStream.on('error', function(error) {
-            return console.log('error', error);
+        return griddb.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
+          var gridStore;
+          gridStore = new GridStore(griddb, req.params.id, "r", {
+            'content_type': 'image/jpeg',
+            'root': 'avatar'
           });
-          fileStream.on('end', function(end) {
-            console.log('end');
-            return griddb.close();
+          return gridStore.open(function(err, gridStore) {
+            var fileStream;
+            res.contentType('image/jpeg');
+            fileStream = gridStore.stream(true);
+            fileStream.on('error', function(error) {
+              return console.log('error', error);
+            });
+            fileStream.on('end', function(end) {
+              console.log('end');
+              return griddb.close();
+            });
+            return fileStream.pipe(res);
           });
-          return fileStream.pipe(res);
         });
       });
     });
