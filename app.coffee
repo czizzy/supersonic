@@ -15,7 +15,7 @@ api = require './api.js'
 app.helpers require('./helpers.js').helpers
 app.dynamicHelpers require('./helpers.js').dynamicHelpers;
 if(configArgs.mongo.account)
-    app.db = db = configArgs.mongo.account + ':' + configArgs.mongo.password + '@' + mongo.db configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect'
+    app.db = db = mongo.db configArgs.mongo.account + ':' + configArgs.mongo.password + '@' + mongo.db configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect'
 else
     app.db = db = mongo.db configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect'
 
