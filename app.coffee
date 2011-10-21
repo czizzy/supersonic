@@ -19,7 +19,6 @@ if(configArgs.mongo.account)
 else
     app.db = db = mongo.db configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect'
 
-#app.db = db = mongo.db 'localhost:27017/supersonic?auto_reconnect'
 server_config = new Server configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: true}
 
 # Configuration
@@ -47,24 +46,7 @@ app.configure 'development', () ->
 
 
 app.configure 'production', () ->
-    # class NotFound
-    #     constructor: (msg) ->
-    #         @name = 'NotFound'
-    #         Error.call this, msg
-    #         Error.captureStacktrace this, arguments.callee
 
-    # sys.inherits(NotFound, Error)
-
-    # app.error (err, req, res, next) ->
-    #     console.log('err', err)
-    #     if err instanceof NotFound
-    #         res.render '404.jade', {status:404,title:'404'}
-    #     else
-    #         next err
-    # app.error (err, req, res) ->
-    #     res.render '500.jade'
-    #         status:500,
-    #         locals: { title:'500', error:err}
 
 db.bind 'user'
 db.bind 'loginToken'
@@ -77,10 +59,12 @@ db.comment.ensureIndex {'p_id':1}, false, (err)->
     console.log 'index err', err
 db.post.ensureIndex {'u_id':1}, false, (err)->
     console.log 'index err', err
+
 # Routes
 router.route app
 
 # api
 api.start app
+
 app.listen(configArgs.port)
 console.log("Express server listening on port %d in %s mode", app.address().port, app.settings.env)

@@ -1,23 +1,20 @@
 extends body
 block body
-	h1= title
-	p Welcome to #{title}
-	h2 Login
 	form.verify-form(method='post', action='/login')
 		div
-			label name:
+			label 用户名:
 				input#username(name='user[username]', required)
 				span
 		div
-			label password:
+			label 密码:
 				input#password(type='password', name='user[password]', required)
 				span
 		div
-			label(for='remember_me') Remember me:
+			label(for='remember_me') 下次自动登录:
 			input#remember_me(type='checkbox', name='remember_me', checked)
 		div
-			input(type='submit', value='Login')
-			a(href='/signup') Register
+			input(type='submit', value='登录')
+			a(href='/signup') 注册
 
 block scripts
 	script(type='text/javascript')

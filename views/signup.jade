@@ -1,22 +1,22 @@
 extends body
 block body
-	h2 New User
+	h2 注册
 	form.verify-form(method='post', action='/signup')
 		div
-			label username:
+			label 用户名:
 				input#username(name='user[username]', required)
 				span
 		div
-			label email:
+			label 邮箱:
 				input#email(name='user[email]', required)
 				span
 		div
-			label password:
+			label 密码:
 				input#password(type='password', name='user[password]', required)
 				span
 		div
-			label comfirm password:
+			label 确认密码:
 				input#confirm(type='password', name='user[confirm_password]', required)
 				span
 		div
-			input(type='submit', value='Save')
+			input(type='submit', value='注册')

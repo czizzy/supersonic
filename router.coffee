@@ -78,7 +78,7 @@ route = (app) ->
             console.log 'following', req.currentUser.following
             req.currentUser.following.forEach (item,index,list) ->
                 db.user.findById item, (err, user) ->
-                    db.post.findItems {u_id: user._id}, {limit:20, skip:0}, (err, posts) ->
+                    db.post.findItems {u_id: user._id}, {limit:10, skip:0}, (err, posts) ->
                         posts.forEach (post) ->
                             post.user = user
                             feeds.push(post)
@@ -94,51 +94,51 @@ route = (app) ->
                                         count++
                                         if(count is list.length)
                                             console.log 'finish', feeds
-                                            res.render 'home', {title: 'home', posts: feeds[0..20], user: req.currentUser}
-                            else res.render 'home', {title: 'home', posts: [], user: req.currentUser}
+                                            res.render 'home', {title: 'home', posts: feeds[0..10], user: req.currentUser, navLink: 'home', ifSelf: 'false'}
+                            else res.render 'home', {title: 'home', posts: [], user: req.currentUser, navLink: 'home'}
         else
             res.render 'index',
                 title: 'SuperSonic'
 
     app.get '/signup', loadUser, (req, res) ->
-        res.send 'please wait'
-    #     if req.currentUser
-    #         res.redirect '/'
-    #     else res.render 'signup', { title: 'signup' }
+    #    res.send 'please wait'
+        if req.currentUser
+            res.redirect '/'
+        else res.render 'signup', { title: 'signup' }
 
-    # app.post '/signup', (req, res, next) ->
-    #     _user = req.body.user
-    #     _user.password = _user.password.trim()
-    #     _user.confirm_password = _user.confirm_password.trim()
-    #     _user.username = _user.username.trim()
-    #     _user.email = _user.email.trim()
+    app.post '/signup', (req, res, next) ->
+        _user = req.body.user
+        _user.password = _user.password.trim()
+        _user.confirm_password = _user.confirm_password.trim()
+        _user.username = _user.username.trim()
+        _user.email = _user.email.trim()
 
-    #     console.log _user
-    #     if _user.password is '' or _user.confirm_password is '' or _user.username is '' or _user.email is ''
-    #         req.flash 'error', '字段不能为空'
-    #         return res.render 'signup', { title: 'signup'}
-    #     if _user.password.length < 6
-    #         req.flash 'error', '密码不能少于六位'
-    #         return res.render 'signup', { title: 'signup'}
-    #     if _user.password isnt _user.confirm_password
-    #         req.flash 'error', '确认密码与密码不同'
-    #         return res.render 'signup', { title: 'signup'}
-    #     testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/
-    #     if !testReg.test _user.email
-    #         req.flash 'error', '邮箱格式不正确'
-    #         return res.render 'signup', { title: 'signup'}
-    #     _user = new User _user
-    #     db.user.insert _user, {safe:true}, (err, replies) ->
-    #         if err?
-    #             if err.code is 11000
-    #                 req.flash 'error', '用户名已存在'
-    #                 res.render 'signup', { title: 'signup'}
-    #             else
-    #                 next err
-    #         else
-    #             console.log 'signup', replies
-    #             req.session.user_id = replies[0]._id
-    #             res.redirect '/'
+        console.log _user
+        if _user.password is '' or _user.confirm_password is '' or _user.username is '' or _user.email is ''
+            req.flash 'error', '字段不能为空'
+            return res.render 'signup', { title: 'signup'}
+        if _user.password.length < 6
+            req.flash 'error', '密码不能少于六位'
+            return res.render 'signup', { title: 'signup'}
+        if _user.password isnt _user.confirm_password
+            req.flash 'error', '确认密码与密码不同'
+            return res.render 'signup', { title: 'signup'}
+        testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/
+        if !testReg.test _user.email
+            req.flash 'error', '邮箱格式不正确'
+            return res.render 'signup', { title: 'signup'}
+        _user = new User _user
+        db.user.insert _user, {safe:true}, (err, replies) ->
+            if err?
+                if err.code is 11000
+                    req.flash 'error', '用户名已存在'
+                    res.render 'signup', { title: 'signup'}
+                else
+                    next err
+            else
+                console.log 'signup', replies
+                req.session.user_id = replies[0]._id
+                res.redirect '/'
 
     app.post '/login', (req, res) ->
         _user = req.body.user
@@ -215,13 +215,15 @@ route = (app) ->
             if(user)
                 localData =
                     title: user.nick+"'s page"
-                    user: user
+                    pageUser: user
                     isLoggedIn: false
                 if(req.currentUser)
-                    user.isSelf = (req.currentUser.username is user.username)
+                    localData.isSelf = (req.currentUser.username is user.username)
                     user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
-                    localData.currentUser = req.currentUser
+                    localData.user = req.currentUser
                     localData.isLoggedIn = true
+                    if(req.currentUser.username == user.username)
+                        localData.navLink = 'user'
                     db.post.findItems {u_id: user._id}, {limit:10, skip:0}, (err, posts) ->
                         posts.forEach (post) ->
                             post.user = user

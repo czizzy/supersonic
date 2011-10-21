@@ -99,7 +99,7 @@
             return db.post.findItems({
               u_id: user._id
             }, {
-              limit: 20,
+              limit: 10,
               skip: 0
             }, function(err, posts) {
               posts.forEach(function(post) {
@@ -123,8 +123,10 @@
                         console.log('finish', feeds);
                         return res.render('home', {
                           title: 'home',
-                          posts: feeds.slice(0, 21),
-                          user: req.currentUser
+                          posts: feeds.slice(0, 11),
+                          user: req.currentUser,
+                          navLink: 'home',
+                          ifSelf: 'false'
                         });
                       }
                     });
@@ -133,7 +135,8 @@
                   return res.render('home', {
                     title: 'home',
                     posts: [],
-                    user: req.currentUser
+                    user: req.currentUser,
+                    navLink: 'home'
                   });
                 }
               }
@@ -147,7 +150,66 @@
       }
     });
     app.get('/signup', loadUser, function(req, res) {
-      return res.send('please wait');
+      if (req.currentUser) {
+        return res.redirect('/');
+      } else {
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+    });
+    app.post('/signup', function(req, res, next) {
+      var testReg, _user;
+      _user = req.body.user;
+      _user.password = _user.password.trim();
+      _user.confirm_password = _user.confirm_password.trim();
+      _user.username = _user.username.trim();
+      _user.email = _user.email.trim();
+      console.log(_user);
+      if (_user.password === '' || _user.confirm_password === '' || _user.username === '' || _user.email === '') {
+        req.flash('error', '字段不能为空');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      if (_user.password.length < 6) {
+        req.flash('error', '密码不能少于六位');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      if (_user.password !== _user.confirm_password) {
+        req.flash('error', '确认密码与密码不同');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/;
+      if (!testReg.test(_user.email)) {
+        req.flash('error', '邮箱格式不正确');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      _user = new User(_user);
+      return db.user.insert(_user, {
+        safe: true
+      }, function(err, replies) {
+        if (err != null) {
+          if (err.code === 11000) {
+            req.flash('error', '用户名已存在');
+            return res.render('signup', {
+              title: 'signup'
+            });
+          } else {
+            return next(err);
+          }
+        } else {
+          console.log('signup', replies);
+          req.session.user_id = replies[0]._id;
+          return res.redirect('/');
+        }
+      });
     });
     app.post('/login', function(req, res) {
       var _user;
@@ -280,14 +342,17 @@
         if (user) {
           localData = {
             title: user.nick + "'s page",
-            user: user,
+            pageUser: user,
             isLoggedIn: false
           };
           if (req.currentUser) {
-            user.isSelf = req.currentUser.username === user.username;
+            localData.isSelf = req.currentUser.username === user.username;
             user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
-            localData.currentUser = req.currentUser;
+            localData.user = req.currentUser;
             localData.isLoggedIn = true;
+            if (req.currentUser.username === user.username) {
+              localData.navLink = 'user';
+            }
             return db.post.findItems({
               u_id: user._id
             }, {

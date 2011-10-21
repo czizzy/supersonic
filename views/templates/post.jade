@@ -1,15 +1,15 @@
 script#post-item-template(type="text/html")
-	p
-		a(href='/user/<%= username %>') <%= usernick %>
-	a(href='/documents/<%= id %>/edit') Edit
-	|
-	a.post-delete(href="/post/<%= id %>") delete 
-	span.play &nbsp;
-	//audio(controls='controls', src="/audio/<%= id %>.<%= format %>", type='audio/<%= format %>')
-	.audio-full
-		p.progress audio
-	div.comment-bar &nbsp;
-		ul
-			<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+comment.body+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'" height="20" width="20"/></li>') }); %>
-	p.text <%= text %>
-	p.date <%= date %>
+	div.clearfix
+		<% print('<a class="avatar" href="/user/' + username + '"><img height="48" width="48" src="/avatar/' + u_id +'" /></a>'); %>
+		div.content
+			<% print('<a href="/post/' + id + '">' + usernick + ' - ' + text + '</a>'); %>
+			- if (typeof(isSelf) != 'undefined' && isSelf)
+				<% print('<a class="post-delete" href="javascript:void(0);">删除</a>'); %>
+			p.date <%= date %>
+	div.clearfix.audio
+		span.play &nbsp;
+		.audio-full
+			p.progress audio
+			div.comment-bar &nbsp;
+				ul
+					<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+comment.body+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'" height="18" width="18"/></li>') }); %>

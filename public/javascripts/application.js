@@ -1,4 +1,16 @@
 $(function(){
+	var opts = {
+	  lines: 12, // The number of lines to draw
+	  length: 7, // The length of each line
+	  width: 4, // The line thickness
+	  radius: 10, // The radius of the inner circle
+	  color: '#000', // #rgb or #rrggbb
+	  speed: 1, // Rounds per second
+	  trail: 60, // Afterglow percentage
+	  shadow: false // Whether to render a shadow
+	};
+	var target = document.getElementById('posts-content');
+	var spinner = new Spinner(opts).spin(target);
 	Backbone.emulateHTTP = true;
 	// _.templateSettings = {
 	//     interpolate : /\{\{(.+?)\}\}/g
@@ -81,7 +93,7 @@ $(function(){
 			var _model = this.model, _view = this, _length = _model.get('time');
 			_model.bind('remove', this.unrender);
 			_model.addListener('whileplaying', function(audio){
-				//console.log('sound '+audio.sID+' playing, '+audio.position+' of '+audio.duration);	
+				console.log('sound '+audio.sID+' playing, '+audio.position+' of '+audio.duration);	
 				var _progress = audio.position/_length*100;
 				$(_view.el).find('p.progress').css('width', _progress+'%');
 				var nowSec = parseInt(audio.position/1000);
@@ -149,6 +161,7 @@ $(function(){
 				format: this.model.get('format'),
 				text: this.model.get('text'),
 				username: this.model.get('user').username,
+				u_id: this.model.get('user')._id,
 				usernick: this.model.get('user').nick,
 				date: this.model.get('date'),
 				comments: this.model.get('comments'),
@@ -232,6 +245,7 @@ $(function(){
 		soundManager.onready(function(){
 			var postListView = new PostListView();
 			postListView.render(postsJSON);
+			spinner.stop();
 		});
 	});
 

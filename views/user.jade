@@ -1,26 +1,22 @@
 extends body
 block body
-	h1= title
-	p hello #{user.nick}
-		img(src="/avatar/"+ user._id, width="48", height="48")
+	p hello #{pageUser.nick}
+		img(src="/avatar/"+ pageUser._id, width="48", height="48")
 	if(isLoggedIn)
-		a(href="/settings") settings
-		a(href="/post/new") new post
-		p
-			a(href="/user/"+currentUser.username) you
-		if(!user.isSelf)
-			if(user.isFollowing)
-				a#follow.unfollow(href="javascript:void(0)", data-id=user._id) unfollow
+		if(!isSelf)
+			if(pageUser.isFollowing)
+				a#follow.unfollow(href="javascript:void(0)", data-id=pageUser._id) unfollow
 			else 
-				a#follow.follow(href="javascript:void(0)", data-id=user._id) follow
-		ul#posts
-		a(href="/logout") logout
+				a#follow.follow(href="javascript:void(0)", data-id=pageUser._id) follow
+		div#posts-content
+			ul#posts
 		!=partial('templates/post')
 	else
 		p 请先
 			a(href="/") 登录
 block scripts
 	if(isLoggedIn)
+		script(src="/javascripts/spin.min.js")
 		script(src="/javascripts/user.js")
 		script(src="/javascripts/application.js")
 		script(type='text/javascript')
