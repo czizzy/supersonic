@@ -7,6 +7,6 @@
       password: '2r01a5ox45o',
       port: 20088
     },
-    port: 3000
+    port: 80
   };
 }).call(this);
