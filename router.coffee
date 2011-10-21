@@ -39,7 +39,7 @@ route = (app) ->
 
     getUser = (req, res, next) ->
        if req.session.user_id?
-            db.user.findById req.session.user_id, (err, user) ->
+            db.user.findById req.session.user_id.toString(), (err, user) ->
                 console.log('session user', user)
                 if user?
                     req.currentUser = user
@@ -167,7 +167,7 @@ route = (app) ->
 
     app.get '/logout', loadUser, (req, res) ->
         if req.session?
-            db.loginToken.removeById req.session.user_id, ->
+            db.loginToken.removeById req.session.user_id.toString(), ->
                 res.clearCookie('logintoken')
                 req.session.destroy()
         res.redirect '/'

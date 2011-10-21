@@ -4,7 +4,7 @@ $(function(){
 	Util.addVerify("confirm", "请确认您的密码", [{'testFunc':function(val){
 		val = $.trim(val);
 		return val === $.trim($('#password').val());
-	},  'errorTip':"Email输入错误，请再检查一下"}], -1, "", 0, "Email不能为空");
+	},  'errorTip':"确认密码输入错误，请再检查一下"}], -1, "", 0, "确认密码不能为空");
 	Util.addVerify("email", "请输入您的邮箱地址", [{'testFunc':function(val){
 		val = $.trim(val);
 		if (val == "") return true;

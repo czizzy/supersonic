@@ -32,7 +32,9 @@
       store: new mongoStore({
         server_config: server_config,
         repeatInterval: 3000,
-        dbname: configArgs.mongo.dbname
+        dbname: configArgs.mongo.dbname,
+        username: configArgs.mongo.account,
+        password: configArgs.mongo.password
       }),
       secret: 'supersonic'
     }));

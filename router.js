@@ -52,7 +52,7 @@
     };
     getUser = function(req, res, next) {
       if (req.session.user_id != null) {
-        return db.user.findById(req.session.user_id, function(err, user) {
+        return db.user.findById(req.session.user_id.toString(), function(err, user) {
           console.log('session user', user);
           if (user != null) {
             req.currentUser = user;
@@ -255,7 +255,7 @@
     });
     app.get('/logout', loadUser, function(req, res) {
       if (req.session != null) {
-        db.loginToken.removeById(req.session.user_id, function() {
+        db.loginToken.removeById(req.session.user_id.toString(), function() {
           res.clearCookie('logintoken');
           return req.session.destroy();
         });
