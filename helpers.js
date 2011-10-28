@@ -29,7 +29,7 @@
       }
     };
     FlashMessage.prototype.toHTML = function() {
-      return '<div class="ui-widget flash">' + '<div class="' + this.stateClass() + ' ui-corner-all">' + '<p><span class="ui-icon ' + this.icon() + '"></span>' + this.messages.join(', ') + '</p>' + '</div>';
+      return '<div class="ui-widget flash">' + '<div class="' + this.stateClass() + ' ui-corner-all">' + '<p><span class="ui-icon ' + this.icon() + '"></span>' + this.messages.join(', ') + '</p>' + '</div></div>';
     };
     return FlashMessage;
   })();

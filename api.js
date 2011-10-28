@@ -1,10 +1,6 @@
 (function() {
-  var Db, GridStore, Server, User, configArgs, db, fs, getBasicUser, getUser, httpAuthUser, model, start, unAuthorized;
+  var User, db, fs, getBasicUser, getUser, httpAuthUser, model, start, unAuthorized;
   model = require('./model.js');
-  configArgs = require('./config.js').config;
-  Db = require('mongodb').Db;
-  GridStore = require('mongodb').GridStore;
-  Server = require('mongodb').Server;
   fs = require('fs');
   User = model.User;
   db = null;
@@ -97,6 +93,10 @@
           console.log('format', format);
           formats = ['mp3', 'wav', 'ogg', 'mp4'];
           if (formats.indexOf(format) === -1) {
+            fs.unlink(files.audio.path, function(err) {
+              console.log('unlink', err);
+              return console.log('successfully deleted %s', files.audio.path);
+            });
             return res.send({
               error: 'the file format is not supported'
             });
@@ -109,7 +109,6 @@
             date: new Date()
           };
           return db.post.insert(post, function(err, replies) {
-            var db1;
             console.log('insert err', err);
             console.log('post success', replies);
             db.user.updateById(post.u_id.toString(), {
@@ -117,39 +116,21 @@
                 num_posts: 1
               }
             });
-            db1 = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
-              auto_reconnect: false
-            }));
-            return db1.open(function(err, db1) {
-              console.log('db1', db1);
-              return db1.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
-                var gridStore;
-                gridStore = new GridStore(db1, replies[0]._id.toString(), "w", {
-                  'content_type': 'audio/' + format,
-                  'root': 'audio',
-                  metadata: {
-                    format: format
-                  }
-                });
-                return gridStore.open(function(err, gridStore) {
-                  console.log('grid open', err);
-                  return gridStore.writeFile(files.audio.path, function(err, result) {
-                    console.log('write err', err);
-                    return gridStore.close(function(err, result) {
-                      db1.close();
-                      fs.unlink(files.audio.path, function(err) {
-                        console.log('unlink', err);
-                        return console.log('successfully deleted %s', files.audio.path);
-                      });
-                      return res.send(replies);
-                    });
-                  });
-                });
+            return audioFS.writeFile(replies[0]._id.toString(), files.audio.path, function(err, result) {
+              fs.unlink(files.audio.path, function(err) {
+                return console.log('successfully deleted %s', files.audio.path);
               });
+              return res.send(replies);
             });
           });
         });
       } else {
+        req.form.emit('callback', function(err, fields, files) {
+          return fs.unlink(files.audio.path, function(err) {
+            console.log('unlink', err);
+            return console.log('successfully deleted %s', files.audio.path);
+          });
+        });
         return unAuthorized(res);
       }
     });

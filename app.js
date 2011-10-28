@@ -12,6 +12,7 @@
   api = require('./api.js');
   app.helpers(require('./helpers.js').helpers);
   app.dynamicHelpers(require('./helpers.js').dynamicHelpers);
+  app.settings.env = configArgs.env;
   if (configArgs.mongo.account) {
     app.db = db = mongo.db(configArgs.mongo.account + ':' + configArgs.mongo.password + '@' + configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect');
   } else {
@@ -40,7 +41,15 @@
     }));
     app.use(express.methodOverride());
     app.use(app.router);
-    app.use(express.static(__dirname + '/public'));
+    return app.use(express.static(__dirname + '/public'));
+  });
+  app.configure('development', function() {
+    return app.use(express.errorHandler({
+      dumpExceptions: true,
+      showStack: true
+    }));
+  });
+  app.configure('production', function() {
     return app.use(function(err, req, res, next) {
       console.log('handle err', err);
       return res.render('500.jade', {
@@ -52,13 +61,6 @@
       });
     });
   });
-  app.configure('development', function() {
-    return app.use(express.errorHandler({
-      dumpExceptions: true,
-      showStack: true
-    }));
-  });
-  app.configure('production', function() {});
   db.bind('user');
   db.bind('loginToken');
   db.bind('post');
@@ -73,8 +75,14 @@
   }, false, function(err) {
     return console.log('index err', err);
   });
-  db.post.ensureIndex({
+  db.post.dropIndex({
     'u_id': 1
+  }, false, function(err) {
+    return console.log('drop err', err);
+  });
+  db.post.ensureIndex({
+    date: -1,
+    u_id: 1
   }, false, function(err) {
     return console.log('index err', err);
   });

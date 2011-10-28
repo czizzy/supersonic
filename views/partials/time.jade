@@ -1,0 +1,1 @@
+span.time <% var friendlyTime = new Date(date); %> <%= friendlyTime.getMonth()+1 %>月<%= friendlyTime.getDate() %>日 <% if(friendlyTime.getHours()<10) print('0'); print(friendlyTime.getHours()); %>:<% if(friendlyTime.getMinutes()<10) print('0'); print(friendlyTime.getMinutes()); %>

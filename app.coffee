@@ -14,6 +14,7 @@ sys = require 'sys'
 api = require './api.js'
 app.helpers require('./helpers.js').helpers
 app.dynamicHelpers require('./helpers.js').dynamicHelpers;
+app.settings.env = configArgs.env
 if(configArgs.mongo.account)
     app.db = db = mongo.db configArgs.mongo.account + ':' + configArgs.mongo.password + '@' + configArgs.mongo.host + ':' + configArgs.mongo.port + '/' + configArgs.mongo.dbname + '?auto_reconnect'
 else
@@ -35,17 +36,18 @@ app.configure () ->
     app.use(app.router)
     app.use(express.static(__dirname + '/public'))
     # error handling
-    app.use (err, req, res, next) ->
-        console.log 'handle err', err
-        res.render '500.jade'
-            status:500,
-            locals: { title:'500', error: err}
+
 
 app.configure 'development', () ->
     app.use(express.errorHandler({ dumpExceptions: true, showStack: true }))
 
 
 app.configure 'production', () ->
+    app.use (err, req, res, next) ->
+        console.log 'handle err', err
+        res.render '500.jade'
+            status:500,
+            locals: { title:'500', error: err}
 
 
 db.bind 'user'
@@ -57,7 +59,9 @@ db.user.ensureIndex {'username':1}, true, (err)->
     console.log 'index err', err
 db.comment.ensureIndex {'p_id':1}, false, (err)->
     console.log 'index err', err
-db.post.ensureIndex {'u_id':1}, false, (err)->
+db.post.dropIndex {'u_id':1}, false, (err)->
+    console.log 'drop err', err
+db.post.ensureIndex {date:-1, u_id:1}, false, (err)->
     console.log 'index err', err
 
 # Routes

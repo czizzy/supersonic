@@ -1,20 +1,23 @@
 extends body
 block body
-	form.verify-form(method='post', action='/login')
-		div
-			label 用户名:
-				input#username(name='user[username]', required)
+	#form-container
+		p#slog 在这里，你可以分享你身边的声音
+		form.verify-form(method='post', action='/login')
+			p
+				label(for="username") 用户名:
+				input#username(name='user[username]', required, type="text")
 				span
-		div
-			label 密码:
+			p
+				label(for="password") 密码:
 				input#password(type='password', name='user[password]', required)
 				span
-		div
-			label(for='remember_me') 下次自动登录:
-			input#remember_me(type='checkbox', name='remember_me', checked)
-		div
-			input(type='submit', value='登录')
-			a(href='/signup') 注册
+			p
+				label(for='remember_me') 下次自动登录:
+				input#remember_me(type='checkbox', name='remember_me', checked)
+			p
+				input.button(type='submit', value='登录')
+				span.signup 还没有帐号，
+					a(href='/signup') 注册
 
 block scripts
 	script(type='text/javascript')

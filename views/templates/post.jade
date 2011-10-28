@@ -1,15 +1,17 @@
 script#post-item-template(type="text/html")
-	div.clearfix
-		<% print('<a class="avatar" href="/user/' + username + '"><img height="48" width="48" src="/avatar/' + u_id +'" /></a>'); %>
-		div.content
-			<% print('<a href="/post/' + id + '">' + usernick + ' - ' + text + '</a>'); %>
-			- if (typeof(isSelf) != 'undefined' && isSelf)
-				<% print('<a class="post-delete" href="javascript:void(0);">删除</a>'); %>
-			p.date <%= date %>
+	div.track-info.clearfix
+		<% print('<a class="avatar" href="/user/' + Util.htmlspecialchars(username) + '"><img height="48" width="48" src="/avatar/' + u_id +'" /></a>'); %>
+		div.track-content
+			<% print('<p class="track-title">' + Util.htmlspecialchars(usernick) + ' - ' + Util.htmlspecialchars(text) + '</p>'); %>
+			p.track-time
+				!=partial('partials/time')
+				- if (typeof(isSelf) != 'undefined' && isSelf)
+					<% print('<a class="post-delete" href="javascript:void(0);">删除</a>'); %>
+
 	div.clearfix.audio
-		span.play &nbsp;
+		span.play
 		.audio-full
 			p.progress audio
 			div.comment-bar &nbsp;
 				ul
-					<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+comment.body+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'" height="18" width="18"/></li>') }); %>
+					<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+Util.htmlspecialchars(comment.body)+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'" height="18" width="18"/></li>') }); %>

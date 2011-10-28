@@ -1,0 +1,35 @@
+mixin pageItem(index, uri, text)
+	- if(uri.indexOf('page=') != -1)
+		a(href="#{ uri.replace(/page=(\d+)/, 'page='+index) }") #{text?text:index}
+	- else
+		- if(uri.indexOf('?')!=-1)
+			a(href="#{uri}&page=#{index}") #{text?text:index}
+		- else
+			a(href="#{uri}?page=#{index}") #{text?text:index}
+
+mixin page(num_items, uri, currentPage)
+	- var pageCount = Math.ceil(num_items/10);
+	- if(pageCount>7 && currentPage>4)
+		- if(pageCount - currentPage < 4)
+			-var start = pageCount - 6
+		-else
+			- var start = currentPage-3;
+	- else var start = 1;
+
+	ul.paginator
+		- if (currentPage == 1)
+			li.current <<
+		- else
+			li
+				mixin pageItem(1, uri, '<<')
+		- for(var i = start; i<=pageCount && i-start < 7 ; i++)
+			- if (currentPage == i)
+				li.current=i
+			- else
+				li
+					mixin pageItem(i, uri)
+		- if (currentPage == pageCount)
+			li.current >>
+		- else
+			li
+				mixin pageItem(pageCount, uri, '>>')

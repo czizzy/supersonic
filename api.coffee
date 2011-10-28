@@ -1,8 +1,4 @@
 model = require './model.js'
-configArgs = require('./config.js').config
-Db = require('mongodb').Db
-GridStore = require('mongodb').GridStore
-Server = require('mongodb').Server
 fs = require 'fs'
 User = model.User
 db = null
@@ -75,6 +71,9 @@ start = (app) ->
                 console.log 'format', format
                 formats = ['mp3', 'wav', 'ogg', 'mp4']
                 if formats.indexOf(format) is -1
+                    fs.unlink files.audio.path, (err) ->
+                        console.log 'unlink', err
+                        console.log 'successfully deleted %s', files.audio.path
                     return res.send {error: 'the file format is not supported'}
                 post =
                     text: fields.text
@@ -87,22 +86,15 @@ start = (app) ->
                     console.log 'insert err', err
                     console.log 'post success', replies
                     db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}
-                    db1 = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
-                    db1.open (err, db1) ->
-                        console.log 'db1', db1
-                        db1.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-                            gridStore = new GridStore db1, replies[0]._id.toString(), "w", {'content_type':'audio/'+format, 'root':'audio', metadata: { format: format }}
-                            gridStore.open (err, gridStore) ->
-                                console.log 'grid open', err
-                                gridStore.writeFile files.audio.path, (err, result) ->
-                                    console.log 'write err', err
-                                    gridStore.close (err, result) ->
-                                        db1.close()
-                                        fs.unlink files.audio.path, (err) ->
-                                            console.log 'unlink', err
-                                            console.log 'successfully deleted %s', files.audio.path
-                                        res.send replies
+                    audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
+                        fs.unlink files.audio.path, (err) ->
+                            console.log 'successfully deleted %s', files.audio.path
+                        res.send replies
         else
+            req.form.emit 'callback', (err, fields, files) ->
+                fs.unlink files.audio.path, (err) ->
+                    console.log 'unlink', err
+                    console.log 'successfully deleted %s', files.audio.path
             unAuthorized res
 
     # app.get '/api/document/list.json', (req, res) ->

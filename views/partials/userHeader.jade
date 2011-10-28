@@ -1,0 +1,35 @@
+div#user-info.clearfix 
+	img#user-avatar(src="/avatar/"+ pageUser._id, width="96", height="96")
+	div#user-content
+		p.nick #{pageUser.nick}
+			if(!isSelf)
+				if(pageUser.isFollowing)
+					span 已关注
+		p.actions
+			if(isLoggedIn)
+				if(!isSelf)
+					if(pageUser.isFollowing)
+						a#follow.unfollow.button(href="javascript:void(0)", data-id=pageUser._id) 取消关注
+					else 
+						a#follow.follow.button(href="javascript:void(0)", data-id=pageUser._id) 关注
+				else
+					a.button(href="/settings") 个人设置
+ul#user-nav.clearfix
+	- if(userNav == 'track')
+		li.active 
+			span 动态 (#{pageUser.num_posts})
+	- else
+		li
+			a(href="/user/#{pageUser.username}") 动态 (#{pageUser.num_posts})
+	- if(userNav == 'following')
+		li.active 
+			span 关注 (#{pageUser.following.length})
+	- else
+		li
+			a(href="/user/#{pageUser.username}/following") 关注 (#{pageUser.following.length})
+	- if(userNav == 'follower')
+		li.active 
+			span 粉丝 (#{pageUser.follower.length})
+	- else 
+		li 
+			a(href="/user/#{pageUser.username}/follower") 粉丝 (#{pageUser.follower.length})

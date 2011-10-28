@@ -23,7 +23,7 @@ class FlashMessage
          '<div class="ui-widget flash">' +
           '<div class="' + @stateClass() + ' ui-corner-all">' +
           '<p><span class="ui-icon ' + @icon() + '"></span>' + @messages.join(', ') + '</p>' +
-          '</div>'
+          '</div></div>'
 
 exports.dynamicHelpers = {
   flashMessages: (req, res) ->

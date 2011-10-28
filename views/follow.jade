@@ -1,0 +1,25 @@
+extends body
+block body
+	include mixin/page
+	div#user-container
+		!=partial('partials/userHeader')
+		ul#user-list.clearfix
+			each user in users
+				li.clearfix 
+					a(href="/user/#{user.username}")
+						img.avatar(src="/avatar/#{user._id}", height="48", width="48")
+					div.nick
+						a(href="/user/#{user.username}")
+							#{user.nick}
+					- if(isSelf && userNav == 'following')
+						a.unfollow.button(href="javascript:void(0)", data-id="#{user._id}") 取消关注
+		- if (userNav == 'following')
+			- if(pageUser.following.length > 10)
+				mixin page(pageUser.following.length, uri, page)			
+		- else 
+			- if(pageUser.follower.length > 10)
+				mixin page(pageUser.follower.length, uri, page)
+block scripts
+	if(isLoggedIn)
+		script(src="/javascripts/spin.min.js")
+		script(src="/javascripts/user.js")

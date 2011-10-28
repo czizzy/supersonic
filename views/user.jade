@@ -1,19 +1,18 @@
 extends body
 block body
-	p hello #{pageUser.nick}
-		img(src="/avatar/"+ pageUser._id, width="48", height="48")
-	if(isLoggedIn)
-		if(!isSelf)
-			if(pageUser.isFollowing)
-				a#follow.unfollow(href="javascript:void(0)", data-id=pageUser._id) unfollow
-			else 
-				a#follow.follow(href="javascript:void(0)", data-id=pageUser._id) follow
-		div#posts-content
-			ul#posts
-		!=partial('templates/post')
-	else
-		p 请先
-			a(href="/") 登录
+	include mixin/page
+	div#user-container
+		!=partial('partials/userHeader')
+
+		if(isLoggedIn)
+			div#posts-content
+				ul#posts
+				- if(posts.num_items > 10)
+					mixin page(posts.num_items, uri, page)
+			!=partial('templates/post')
+		else
+			p 请先
+				a(href="/") 登录
 block scripts
 	if(isLoggedIn)
 		script(src="/javascripts/spin.min.js")

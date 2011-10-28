@@ -1,13 +1,13 @@
-configArgs = require('./config.js').config
 model = require './model.js'
+GridFS = require('./gridfs.js').GridFS
 LoginToken = model.LoginToken
 User = model.User
+im = require 'imagemagick'
 #step = require('./step.js')
-GridStore = require('mongodb').GridStore
-Db = require('mongodb').Db
-Server = require('mongodb').Server
-server_config = new Server configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false}
 fs = require 'fs'
+
+avatarFS = new GridFS 'avatar'
+audioFS = new GridFS 'audio'
 
 route = (app) ->
     db = app.db
@@ -38,7 +38,7 @@ route = (app) ->
                     next()
 
     getUser = (req, res, next) ->
-       if req.session.user_id?
+        if req.session.user_id?
             db.user.findById req.session.user_id.toString(), (err, user) ->
                 console.log('session user', user)
                 if user?
@@ -69,76 +69,113 @@ route = (app) ->
         else
             getUser req, res, next
 
+    getFeeds = (currentUser, lastDt, fn) ->
+        feeds = {}
+        feeds.items = []
+        feeds.hasMore = false
+        count = 0
+        hasFeedUsers = []
+        console.log currentUser
+        currentUser.following.push currentUser._id.toString()
+        console.log 'following', currentUser.following
+        currentUser.following.forEach (item,index,list) ->
+            db.user.findById item, (err, user) ->
+                if lastDt
+                    selector = {u_id: user._id, date:{'$lt':lastDt}}
+                else
+                    selector = {u_id: user._id}
+                db.post.findItems selector, {sort:{date:-1}, limit:10, skip:0}, (err, posts) ->
+                    console.log user.username, posts
+                    if(posts.length>0)
+                        hasFeedUsers.push user
+                    posts.forEach (post) ->
+                        post.user = user
+                        feeds.items.push(post)
+                    count++
+                    if(count is list.length)
+                        count = 0
+                        if feeds.items.length
+                            feeds.items.sort (a,b)->
+                                b.date.getTime() - a.date.getTime()
+                            feeds.hasMore = (feeds.items.length>10)
+                            if(feeds.hasMore)
+                                feeds.items = feeds.items[0...10]
+                            feeds.items.forEach (feed, index, list) ->
+                                db.comment.findItems {p_id:feed._id}, (err, comments) ->
+                                    feed.comments = comments
+                                    console.log feed.date
+                                    count++
+                                    if(count is list.length)
+                                        console.log 'finish', feeds
+                                        if(hasFeedUsers.length==1)
+                                            if lastDt
+                                                selector = {u_id: hasFeedUsers[0]._id, date:{'$lt':lastDt}}
+                                            else
+                                                selector = {u_id: hasFeedUsers[0]._id}
+                                            db.post.find selector, {sort:{date:-1}, limit:10, skip:0}, (err, cursor) ->
+                                                cursor.count (err, count) ->
+                                                    console.log 'more count', count
+                                                    feeds.hasMore = count>10
+                                                    fn feeds
+                                        else
+                                            console.log 'hasMore', feeds.hasMore
+                                            fn feeds
+                        else fn feeds
+
+    app.get '/feeds', loadUser, (req, res) ->
+        if req.currentUser
+            getFeeds req.currentUser, new Date(req.query.dt), (feeds) ->
+                res.send feeds
+        else
+            res.send {error:'请先登录'}
 
     app.get '/', loadUser, (req, res) ->
         if req.currentUser
-            feeds = []
-            count = 0
-            req.currentUser.following.push req.currentUser._id.toString()
-            console.log 'following', req.currentUser.following
-            req.currentUser.following.forEach (item,index,list) ->
-                db.user.findById item, (err, user) ->
-                    db.post.findItems {u_id: user._id}, {limit:10, skip:0}, (err, posts) ->
-                        posts.forEach (post) ->
-                            post.user = user
-                            feeds.push(post)
-                        count++
-                        if(count is list.length)
-                            count = 0
-                            feeds.sort (a,b)->
-                                b.date.getTime() - a.date.getTime()
-                            if feeds.length
-                                feeds.forEach (feed, index, list) ->
-                                    db.comment.findItems {p_id:feed._id}, (err, comments) ->
-                                        feed.comments = comments
-                                        count++
-                                        if(count is list.length)
-                                            console.log 'finish', feeds
-                                            res.render 'home', {title: 'home', posts: feeds[0..10], user: req.currentUser, navLink: 'home', ifSelf: 'false'}
-                            else res.render 'home', {title: 'home', posts: [], user: req.currentUser, navLink: 'home'}
+            console.log req.currentUser
+            getFeeds req.currentUser, null, (feeds) ->
+                res.render 'home', {title: 'home', posts: feeds, user: req.currentUser, navLink: 'home', ifSelf: 'false'}
         else
             res.render 'index',
                 title: 'SuperSonic'
 
     app.get '/signup', loadUser, (req, res) ->
-        res.send 'please wait'
-    #     if req.currentUser
-    #         res.redirect '/'
-    #     else res.render 'signup', { title: 'signup' }
+        if req.currentUser
+            res.redirect '/'
+        else res.render 'signup', { title: 'signup' }
 
-    # app.post '/signup', (req, res, next) ->
-    #     _user = req.body.user
-    #     _user.password = _user.password.trim()
-    #     _user.confirm_password = _user.confirm_password.trim()
-    #     _user.username = _user.username.trim()
-    #     _user.email = _user.email.trim()
+    app.post '/signup', (req, res, next) ->
+        _user = req.body.user
+        _user.password = _user.password.trim()
+        _user.confirm_password = _user.confirm_password.trim()
+        _user.username = _user.username.trim()
+        _user.email = _user.email.trim()
 
-    #     console.log _user
-    #     if _user.password is '' or _user.confirm_password is '' or _user.username is '' or _user.email is ''
-    #         req.flash 'error', '字段不能为空'
-    #         return res.render 'signup', { title: 'signup'}
-    #     if _user.password.length < 6
-    #         req.flash 'error', '密码不能少于六位'
-    #         return res.render 'signup', { title: 'signup'}
-    #     if _user.password isnt _user.confirm_password
-    #         req.flash 'error', '确认密码与密码不同'
-    #         return res.render 'signup', { title: 'signup'}
-    #     testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/
-    #     if !testReg.test _user.email
-    #         req.flash 'error', '邮箱格式不正确'
-    #         return res.render 'signup', { title: 'signup'}
-    #     _user = new User _user
-    #     db.user.insert _user, {safe:true}, (err, replies) ->
-    #         if err?
-    #             if err.code is 11000
-    #                 req.flash 'error', '用户名已存在'
-    #                 res.render 'signup', { title: 'signup'}
-    #             else
-    #                 next err
-    #         else
-    #             console.log 'signup', replies
-    #             req.session.user_id = replies[0]._id
-    #             res.redirect '/'
+        console.log _user
+        if _user.password is '' or _user.confirm_password is '' or _user.username is '' or _user.email is ''
+            req.flash 'error', '字段不能为空'
+            return res.render 'signup', { title: 'signup'}
+        if _user.password.length < 6
+            req.flash 'error', '密码不能少于六位'
+            return res.render 'signup', { title: 'signup'}
+        if _user.password isnt _user.confirm_password
+            req.flash 'error', '确认密码与密码不同'
+            return res.render 'signup', { title: 'signup'}
+        testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/
+        if !testReg.test _user.email
+            req.flash 'error', '邮箱格式不正确'
+            return res.render 'signup', { title: 'signup'}
+        _user = new User _user
+        db.user.insert _user, {safe:true}, (err, replies) ->
+            if err?
+                if err.code is 11000
+                    req.flash 'error', '用户名已存在'
+                    res.render 'signup', { title: 'signup'}
+                else
+                    next err
+            else
+                console.log 'signup', replies
+                req.session.user_id = replies[0]._id
+                res.redirect '/'
 
     app.post '/login', (req, res) ->
         _user = req.body.user
@@ -187,51 +224,140 @@ route = (app) ->
         if req.currentUser
             _user = req.currentUser
             req.form.emit 'callback', (err, fields, files) ->
-                if (err)
-                    console.log err
+                console.log 'fie', fields
+                console.log 'fil', files
+                console.log '\nuploaded %s to %s', files.avatar.filename, files.avatar.path
+                console.log 'fields', fields
+                if(fields.nick)
+                    db.user.updateById _user._id.toString(), {'$set': {nick: fields.nick}}
+                if(files.avatar.size>0)
+                    im.identify files.avatar.path, (err, features)->
+                        console.log 'features',features
+                        imageFormats = ['JPEG', 'PNG', 'GIF']
+                        if(features? and imageFormats.indexOf(features.format) != -1)
+                            size = if features.width <= features.height then features.width else features.height
+                            cropPath = files.avatar.path+'_cropped'
+                            im.crop {srcPath: files.avatar.path, dstPath: cropPath, width: size}, (err, stdout, stderr) ->
+                                fs.unlink files.avatar.path, (err) ->
+                                    console.log 'successfully deleted %s', files.avatar.path
+                                avatarFS.writeFile _user._id.toString(), cropPath, (err, result) ->
+                                    fs.unlink cropPath, (err) ->
+                                        console.log 'successfully deleted %s', cropPath
+                                        res.redirect '/user/'+_user.username
+                        else
+                            req.flash 'error', '不支持的图像格式'
+                            res.render 'settings', {title: '个人设置', user:_user}
                 else
-                    console.log '\nuploaded %s to %s', files.avatar.filename, files.avatar.path
-                    console.log 'fields', fields
-                    if(fields.nick)
-                        db.user.updateById _user._id.toString(), {'$set': {nick: fields.nick}}
-                    db1 = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
-                    db1.open (err, db1) ->
-                        db1.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-                            gridStore = new GridStore db1, _user._id.toString(), "w", {'content_type':'image/jpeg', 'root':'avatar'}
-                            gridStore.open (err, gridStore) ->
-                                console.log 'open err', err
-                                gridStore.writeFile files.avatar.path, (err, result) ->
-                                    console.log 'write err', err
-                                    gridStore.close (err, result) ->
-                                        db1.close()
-                                        fs.unlink files.avatar.path, (err) ->
-                                            console.log err if err
-                                            console.log 'successfully deleted %s', files.avatar.path
-                            res.redirect '/'
+                    res.redirect '/user/'+_user.username
         else res.redirect '/'
 
     app.get '/user/:username', loadUser, (req, res) ->
         db.user.findOne {username:req.params.username}, (err, user) ->
             if(user)
+                page = if (req.query.page? and !isNaN(req.query.page)) then req.query.page else 1
                 localData =
-                    title: user.nick+"'s page"
+                    title: user.nick+"的主页"
                     pageUser: user
                     isLoggedIn: false
+                    page: page
+                    userNav: 'track'
                 if(req.currentUser)
                     localData.isSelf = (req.currentUser.username is user.username)
                     user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
                     localData.user = req.currentUser
                     localData.isLoggedIn = true
+                    localData.uri = req.url
                     if(req.currentUser.username == user.username)
                         localData.navLink = 'user'
-                    db.post.findItems {u_id: user._id}, {limit:10, skip:0}, (err, posts) ->
-                        posts.forEach (post) ->
-                            post.user = user
-                        localData.posts = posts
-                        res.render 'user', localData
+                    console.log 'skip', (page-1)
+                    db.post.find {u_id: user._id}, {sort:{date: -1}, limit:10, skip:10*(page-1)}, (err, cursor) ->
+                        cursor.toArray (err,posts) ->
+                            cursor.count (err, count) ->
+                                feeds = {}
+                                feeds.num_items = count
+                                feeds.items = posts
+                                feeds.items.forEach (post) ->
+                                    post.user = user
+                                localData.posts = feeds
+                                res.render 'user', localData
                 else res.render 'user', localData
             else
                 res.send err
+
+    app.get '/user/:username/following', loadUser, (req, res) ->
+        db.user.findOne {username:req.params.username}, (err, user) ->
+            if(user)
+                page = if (req.query.page? and !isNaN(req.query.page)) then req.query.page else 1
+                localData =
+                    title: user.nick+"的关注"
+                    pageUser: user
+                    isLoggedIn: false
+                    page: page
+                    userNav: 'following'
+                if(req.currentUser)
+                    localData.isSelf = (req.currentUser.username is user.username)
+                    user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
+                    localData.user = req.currentUser
+                    localData.isLoggedIn = true
+                    localData.uri = req.url
+                    count = 0
+                    start = (page-1)*10
+                    console.log start
+                    localData.users = []
+                    followings = user.following[start...(start+10)]
+                    #followings = user.following
+                    console.log followings
+                    if followings.length
+                        followings.forEach (following, index, list) ->
+                            db.user.findById following, (err, user) ->
+                                localData.users.push user
+                                count++
+                                if count is list.length
+                                    console.log localData.users
+                                    res.render 'follow', localData
+                    else
+                        res.render 'follow', localData
+                else res.render 'follow', localData
+            else
+                res.send err
+
+    app.get '/user/:username/follower', loadUser, (req, res) ->
+        db.user.findOne {username:req.params.username}, (err, user) ->
+            if(user)
+                page = if (req.query.page? and !isNaN(req.query.page)) then req.query.page else 1
+                localData =
+                    title: user.nick+"的关注"
+                    pageUser: user
+                    isLoggedIn: false
+                    page: page
+                    userNav: 'follower'
+                if(req.currentUser)
+                    localData.isSelf = (req.currentUser.username is user.username)
+                    user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
+                    localData.user = req.currentUser
+                    localData.isLoggedIn = true
+                    localData.uri = req.url
+                    count = 0
+                    start = (page-1)*10
+                    console.log start
+                    localData.users = []
+                    followers = user.follower[start...(start+10)]
+                    #followings = user.following
+                    console.log followers
+                    if followers.length
+                        followers.forEach (follower, index, list) ->
+                            db.user.findById follower, (err, user) ->
+                                localData.users.push user
+                                count++
+                                if count is list.length
+                                    console.log localData.users
+                                    res.render 'follow', localData
+                    else
+                        res.render 'follow', localData
+                else res.render 'follow', localData
+            else
+                res.send err
+
 
     app.put '/follow/:id', loadUser, (req, res) ->
         if(req.currentUser)
@@ -240,11 +366,9 @@ route = (app) ->
                 if (user)
                     console.log 'follow user', user
                     db.user.update {_id:currentUser._id, following:{$ne: user._id.toString()}}, {$push: {'following': user._id.toString()}, $inc: {num_following: 1}}, {safe: true}, (err, count)->
-                        console.log 'following err', err
                         console.log 'following count', count
                         db.user.update {_id:user._id, follower:{$ne: currentUser._id.toString()}}, {$push: {'follower': currentUser._id.toString()}, '$inc': {num_follower: 1}}, {safe: true}, (err, count)->
                             console.log 'follower count', count
-                            console.log 'follower err', err
                             res.send 'success'
                 else res.send 'error'
         else
@@ -257,11 +381,9 @@ route = (app) ->
                 if (user)
                     console.log 'unfollow user', user
                     db.user.update {_id:currentUser._id, following: user._id.toString()}, {$pull: {'following': user._id.toString()}, $inc: {num_following: -1}}, {safe: true}, (err, count)->
-                        console.log 'unfollowing err', err
                         console.log 'unfollowing count', count
                         db.user.update {_id:user._id, follower: currentUser._id.toString()}, {$pull: {'follower': currentUser._id.toString()}, '$inc': {num_follower: -1}}, {safe: true}, (err, count)->
                             console.log 'follower count', count
-                            console.log 'follower err', err
                             res.send 'success'
                 else res.send 'error'
         else
@@ -285,41 +407,27 @@ route = (app) ->
         if req.currentUser
             _user = req.currentUser
             req.form.emit 'callback', (err, fields, files) ->
-                if (err)
-                    console.log err
-                else
-                    console.log 'file', files
-                    console.log '\nuploaded %s to %s', files.audio.filename, files.audio.path
-                    format = files.audio.filename.substr files.audio.filename.lastIndexOf('.') + 1
-                    console.log 'format', format
-                    formats = ['mp3', 'wav', 'ogg', 'mp4']
-                    return res.redirect 'back' if formats.indexOf(format) is -1
-                    post =
-                        text: fields.text
-                        u_id: _user._id
-                        format: format,
-                        time: 52846, #TODO
-                        date: new Date()
+                console.log 'file', files
+                console.log '\nuploaded %s to %s', files.audio.filename, files.audio.path
+                format = files.audio.filename.substr files.audio.filename.lastIndexOf('.') + 1
+                console.log 'format', format
+                formats = ['mp3', 'wav', 'ogg', 'mp4']
+                return res.redirect 'back' if formats.indexOf(format) is -1
+                post =
+                    text: fields.text
+                    u_id: _user._id
+                    format: format,
+                    time: 52846, #TODO
+                    date: new Date()
 
-                    db.post.insert post, (err, replies) ->
-                        console.log 'saved post', replies
-                        #db.feed.insert {_id:replies[0]._id, u_id:_user._id}
-                        db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}
-                        db1 = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
-                        db1.open (err, db1) ->
-                            db1.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-                                console.log 'err', err
-                                gridStore = new GridStore db1, replies[0]._id.toString(), "w", {'content_type':'audio/'+format, 'root':'audio', metadata: { format: format }}
-                                gridStore.open (err, gridStore) ->
-                                    console.log 'open err', err
-                                    gridStore.writeFile files.audio.path, (err, result) ->
-                                        console.log 'write err', err
-                                        gridStore.close (err, result) ->
-                                            db1.close()
-                                            fs.unlink files.audio.path, (err) ->
-                                                console.log err if err
-                                                console.log 'successfully deleted %s', files.audio.path
-                                        res.redirect '/'
+                db.post.insert post, (err, replies) ->
+                    console.log 'saved post', replies
+                    #db.feed.insert {_id:replies[0]._id, u_id:_user._id}
+                    db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}
+                    audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
+                        fs.unlink files.audio.path, (err) ->
+                            console.log 'successfully deleted %s', files.audio.path
+                        res.redirect '/'
 
         else res.redirect '/'
 
@@ -328,51 +436,21 @@ route = (app) ->
             db.comment.remove {p_id: db.comment.id(req.params.id)}, (err, comment) ->
                 console.log 'delete comment', comment
             db.user.updateById req.currentUser._id.toString(), {'$inc': {num_posts: -1}}
-            griddb = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
-            griddb.open (err, griddb) ->
-                GridStore.unlink griddb, req.params.id, { 'content_type':'audio/mpeg', 'root':'audio' }, (err, content) ->
-                    console.log 'err', err
-                    griddb.close()
+            audioFS.unlink req.params.id, (err) ->
             res.send('1')
 
     app.get '/audio/:id.:format', (req, res) ->
-        griddb = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
-        griddb.open (err, griddb) ->
-            griddb.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-                gridStore = new GridStore griddb, req.params.id, "r", { 'content_type':'audio/mpeg', 'root':'audio',  }
-                gridStore.open (err, gridStore) ->
-                    res.contentType 'audio/'+req.params.format
-                    fileStream = gridStore.stream(true)
-                    # fileStream.on 'data', (data) ->
-                    #     console.log 'data', data
-                    fileStream.on 'error', (error) ->
-                        console.log 'error', error
-                    fileStream.on 'end', (end) ->
-                        console.log 'end'
-                        griddb.close()
-                    fileStream.pipe(res)
-            # GridStore.read griddb, req.params.id, (err, content) ->
-            #     console.log 'err', err
-            #     res.contentType 'audio/mpeg'
-            #     console.log content
-            #     res.send new Buffer(content, "binary")
-            #     griddb.close()
+        audioFS.stream req.params.id, (err, stream) ->
+            res.contentType 'audio/'+req.params.format
+            stream.pipe(res)
 
     app.get '/avatar/:id', (req, res) ->
-        griddb = new Db configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {auto_reconnect: false})
-        griddb.open (err, griddb) ->
-            griddb.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-                gridStore = new GridStore griddb, req.params.id, "r", { 'content_type':'image/jpeg', 'root':'avatar' }
-                gridStore.open (err, gridStore) ->
+        _filename = req.params.id
+        avatarFS.exist _filename, (err, exist) ->
+            if exist
+                avatarFS.stream _filename, (err, stream) ->
                     res.contentType 'image/jpeg'
-                    fileStream = gridStore.stream(true)
-                    # fileStream.on 'data', (data) ->
-                    #     console.log 'data', data
-                    fileStream.on 'error', (error) ->
-                        console.log 'error', error
-                    fileStream.on 'end', (end) ->
-                        console.log 'end'
-                        griddb.close()
-                    fileStream.pipe(res)
+                    stream.pipe(res)
+            else res.sendfile('public/images/avatar-default-60.png')
 
 exports.route = route

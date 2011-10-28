@@ -1,7 +1,9 @@
 header 
 	#header-inner
 		#header-content 
-			h1#logo SuperSonic
+			h1#logo 
+				a(href="/")
+					img(src="/images/logo.jpg", alt="SuperSonic")
 			div#utilities 
 				ul
 					- if (typeof user !== 'undefined')
@@ -17,13 +19,13 @@ header
 nav
 	#navigator
 		ul
-			li(class=(typeof navLink !== 'undefined' && navLink == 'home')?'active':'')
-				a(href="/")
-					span 首页
 			- if (typeof user !== 'undefined')
+				li(class=(typeof navLink !== 'undefined' && navLink == 'home')?'active':'')
+					a(href="/")
+						span 首页
 				li(class=(typeof navLink !== 'undefined' && navLink == 'user')?'active':'')
 					a(href="/user/#{user.username}")
 						span 个人主页
-			li(class=(typeof navLink !== 'undefined' && navLink == 'explore')?'active':'')
-				a(href="/explore')
-						span 发现
+			//li(class=(typeof navLink !== 'undefined' && navLink == 'explore')?'active':'')
+			//	a(href="/explore')
+			//			span 发现

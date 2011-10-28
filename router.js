@@ -1,18 +1,15 @@
 (function() {
-  var Db, GridStore, LoginToken, Server, User, configArgs, fs, model, route, server_config;
-  configArgs = require('./config.js').config;
+  var GridFS, LoginToken, User, audioFS, avatarFS, fs, im, model, route;
   model = require('./model.js');
+  GridFS = require('./gridfs.js').GridFS;
   LoginToken = model.LoginToken;
   User = model.User;
-  GridStore = require('mongodb').GridStore;
-  Db = require('mongodb').Db;
-  Server = require('mongodb').Server;
-  server_config = new Server(configArgs.mongo.host, configArgs.mongo.port, {
-    auto_reconnect: false
-  });
+  im = require('imagemagick');
   fs = require('fs');
+  avatarFS = new GridFS('avatar');
+  audioFS = new GridFS('audio');
   route = function(app) {
-    var authenticateFromLoginToken, db, getUser, loadUser;
+    var authenticateFromLoginToken, db, getFeeds, getUser, loadUser;
     db = app.db;
     authenticateFromLoginToken = function(req, res, next) {
       var cookie;
@@ -87,60 +84,128 @@
         return getUser(req, res, next);
       }
     };
-    app.get('/', loadUser, function(req, res) {
-      var count, feeds;
-      if (req.currentUser) {
-        feeds = [];
-        count = 0;
-        req.currentUser.following.push(req.currentUser._id.toString());
-        console.log('following', req.currentUser.following);
-        return req.currentUser.following.forEach(function(item, index, list) {
-          return db.user.findById(item, function(err, user) {
-            return db.post.findItems({
+    getFeeds = function(currentUser, lastDt, fn) {
+      var count, feeds, hasFeedUsers;
+      feeds = {};
+      feeds.items = [];
+      feeds.hasMore = false;
+      count = 0;
+      hasFeedUsers = [];
+      console.log(currentUser);
+      currentUser.following.push(currentUser._id.toString());
+      console.log('following', currentUser.following);
+      return currentUser.following.forEach(function(item, index, list) {
+        return db.user.findById(item, function(err, user) {
+          var selector;
+          if (lastDt) {
+            selector = {
+              u_id: user._id,
+              date: {
+                '$lt': lastDt
+              }
+            };
+          } else {
+            selector = {
               u_id: user._id
-            }, {
-              limit: 10,
-              skip: 0
-            }, function(err, posts) {
-              posts.forEach(function(post) {
-                post.user = user;
-                return feeds.push(post);
-              });
-              count++;
-              if (count === list.length) {
-                count = 0;
-                feeds.sort(function(a, b) {
+            };
+          }
+          return db.post.findItems(selector, {
+            sort: {
+              date: -1
+            },
+            limit: 10,
+            skip: 0
+          }, function(err, posts) {
+            console.log(user.username, posts);
+            if (posts.length > 0) {
+              hasFeedUsers.push(user);
+            }
+            posts.forEach(function(post) {
+              post.user = user;
+              return feeds.items.push(post);
+            });
+            count++;
+            if (count === list.length) {
+              count = 0;
+              if (feeds.items.length) {
+                feeds.items.sort(function(a, b) {
                   return b.date.getTime() - a.date.getTime();
                 });
-                if (feeds.length) {
-                  return feeds.forEach(function(feed, index, list) {
-                    return db.comment.findItems({
-                      p_id: feed._id
-                    }, function(err, comments) {
-                      feed.comments = comments;
-                      count++;
-                      if (count === list.length) {
-                        console.log('finish', feeds);
-                        return res.render('home', {
-                          title: 'home',
-                          posts: feeds.slice(0, 11),
-                          user: req.currentUser,
-                          navLink: 'home',
-                          ifSelf: 'false'
-                        });
-                      }
-                    });
-                  });
-                } else {
-                  return res.render('home', {
-                    title: 'home',
-                    posts: [],
-                    user: req.currentUser,
-                    navLink: 'home'
-                  });
+                feeds.hasMore = feeds.items.length > 10;
+                if (feeds.hasMore) {
+                  feeds.items = feeds.items.slice(0, 10);
                 }
+                return feeds.items.forEach(function(feed, index, list) {
+                  return db.comment.findItems({
+                    p_id: feed._id
+                  }, function(err, comments) {
+                    feed.comments = comments;
+                    console.log(feed.date);
+                    count++;
+                    if (count === list.length) {
+                      console.log('finish', feeds);
+                      if (hasFeedUsers.length === 1) {
+                        if (lastDt) {
+                          selector = {
+                            u_id: hasFeedUsers[0]._id,
+                            date: {
+                              '$lt': lastDt
+                            }
+                          };
+                        } else {
+                          selector = {
+                            u_id: hasFeedUsers[0]._id
+                          };
+                        }
+                        return db.post.find(selector, {
+                          sort: {
+                            date: -1
+                          },
+                          limit: 10,
+                          skip: 0
+                        }, function(err, cursor) {
+                          return cursor.count(function(err, count) {
+                            console.log('more count', count);
+                            feeds.hasMore = count > 10;
+                            return fn(feeds);
+                          });
+                        });
+                      } else {
+                        console.log('hasMore', feeds.hasMore);
+                        return fn(feeds);
+                      }
+                    }
+                  });
+                });
+              } else {
+                return fn(feeds);
               }
-            });
+            }
+          });
+        });
+      });
+    };
+    app.get('/feeds', loadUser, function(req, res) {
+      if (req.currentUser) {
+        return getFeeds(req.currentUser, new Date(req.query.dt), function(feeds) {
+          return res.send(feeds);
+        });
+      } else {
+        return res.send({
+          error: '请先登录'
+        });
+      }
+    });
+    app.get('/', loadUser, function(req, res) {
+      if (req.currentUser) {
+        console.log(req.currentUser);
+        return getFeeds(req.currentUser, null, function(feeds) {
+          return res.render('home', {
+            title: 'home',
+            posts: feeds,
+            user: req.currentUser,
+            navLink: 'home',
+            ifSelf: 'false'
           });
         });
       } else {
@@ -150,7 +215,66 @@
       }
     });
     app.get('/signup', loadUser, function(req, res) {
-      return res.send('please wait');
+      if (req.currentUser) {
+        return res.redirect('/');
+      } else {
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+    });
+    app.post('/signup', function(req, res, next) {
+      var testReg, _user;
+      _user = req.body.user;
+      _user.password = _user.password.trim();
+      _user.confirm_password = _user.confirm_password.trim();
+      _user.username = _user.username.trim();
+      _user.email = _user.email.trim();
+      console.log(_user);
+      if (_user.password === '' || _user.confirm_password === '' || _user.username === '' || _user.email === '') {
+        req.flash('error', '字段不能为空');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      if (_user.password.length < 6) {
+        req.flash('error', '密码不能少于六位');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      if (_user.password !== _user.confirm_password) {
+        req.flash('error', '确认密码与密码不同');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/;
+      if (!testReg.test(_user.email)) {
+        req.flash('error', '邮箱格式不正确');
+        return res.render('signup', {
+          title: 'signup'
+        });
+      }
+      _user = new User(_user);
+      return db.user.insert(_user, {
+        safe: true
+      }, function(err, replies) {
+        if (err != null) {
+          if (err.code === 11000) {
+            req.flash('error', '用户名已存在');
+            return res.render('signup', {
+              title: 'signup'
+            });
+          } else {
+            return next(err);
+          }
+        } else {
+          console.log('signup', replies);
+          req.session.user_id = replies[0]._id;
+          return res.redirect('/');
+        }
+      });
     });
     app.post('/login', function(req, res) {
       var _user;
@@ -228,47 +352,50 @@
       if (req.currentUser) {
         _user = req.currentUser;
         return req.form.emit('callback', function(err, fields, files) {
-          var db1;
-          if (err) {
-            return console.log(err);
-          } else {
-            console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
-            console.log('fields', fields);
-            if (fields.nick) {
-              db.user.updateById(_user._id.toString(), {
-                '$set': {
-                  nick: fields.nick
-                }
-              });
-            }
-            db1 = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
-              auto_reconnect: false
-            }));
-            return db1.open(function(err, db1) {
-              return db1.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
-                var gridStore;
-                gridStore = new GridStore(db1, _user._id.toString(), "w", {
-                  'content_type': 'image/jpeg',
-                  'root': 'avatar'
-                });
-                gridStore.open(function(err, gridStore) {
-                  console.log('open err', err);
-                  return gridStore.writeFile(files.avatar.path, function(err, result) {
-                    console.log('write err', err);
-                    return gridStore.close(function(err, result) {
-                      db1.close();
-                      return fs.unlink(files.avatar.path, function(err) {
-                        if (err) {
-                          console.log(err);
-                        }
-                        return console.log('successfully deleted %s', files.avatar.path);
-                      });
+          console.log('fie', fields);
+          console.log('fil', files);
+          console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
+          console.log('fields', fields);
+          if (fields.nick) {
+            db.user.updateById(_user._id.toString(), {
+              '$set': {
+                nick: fields.nick
+              }
+            });
+          }
+          if (files.avatar.size > 0) {
+            return im.identify(files.avatar.path, function(err, features) {
+              var cropPath, imageFormats, size;
+              console.log('features', features);
+              imageFormats = ['JPEG', 'PNG', 'GIF'];
+              if ((features != null) && imageFormats.indexOf(features.format) !== -1) {
+                size = features.width <= features.height ? features.width : features.height;
+                cropPath = files.avatar.path + '_cropped';
+                return im.crop({
+                  srcPath: files.avatar.path,
+                  dstPath: cropPath,
+                  width: size
+                }, function(err, stdout, stderr) {
+                  fs.unlink(files.avatar.path, function(err) {
+                    return console.log('successfully deleted %s', files.avatar.path);
+                  });
+                  return avatarFS.writeFile(_user._id.toString(), cropPath, function(err, result) {
+                    return fs.unlink(cropPath, function(err) {
+                      console.log('successfully deleted %s', cropPath);
+                      return res.redirect('/user/' + _user.username);
                     });
                   });
                 });
-                return res.redirect('/');
-              });
+              } else {
+                req.flash('error', '不支持的图像格式');
+                return res.render('settings', {
+                  title: '个人设置',
+                  user: _user
+                });
+              }
             });
+          } else {
+            return res.redirect('/user/' + _user.username);
           }
         });
       } else {
@@ -279,35 +406,147 @@
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
-        var localData;
+        var localData, page;
         if (user) {
+          page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
-            title: user.nick + "'s page",
+            title: user.nick + "的主页",
             pageUser: user,
-            isLoggedIn: false
+            isLoggedIn: false,
+            page: page,
+            userNav: 'track'
           };
           if (req.currentUser) {
             localData.isSelf = req.currentUser.username === user.username;
             user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
             localData.user = req.currentUser;
             localData.isLoggedIn = true;
+            localData.uri = req.url;
             if (req.currentUser.username === user.username) {
               localData.navLink = 'user';
             }
-            return db.post.findItems({
+            console.log('skip', page - 1);
+            return db.post.find({
               u_id: user._id
             }, {
+              sort: {
+                date: -1
+              },
               limit: 10,
-              skip: 0
-            }, function(err, posts) {
-              posts.forEach(function(post) {
-                return post.user = user;
+              skip: 10 * (page - 1)
+            }, function(err, cursor) {
+              return cursor.toArray(function(err, posts) {
+                return cursor.count(function(err, count) {
+                  var feeds;
+                  feeds = {};
+                  feeds.num_items = count;
+                  feeds.items = posts;
+                  feeds.items.forEach(function(post) {
+                    return post.user = user;
+                  });
+                  localData.posts = feeds;
+                  return res.render('user', localData);
+                });
               });
-              localData.posts = posts;
-              return res.render('user', localData);
             });
           } else {
             return res.render('user', localData);
+          }
+        } else {
+          return res.send(err);
+        }
+      });
+    });
+    app.get('/user/:username/following', loadUser, function(req, res) {
+      return db.user.findOne({
+        username: req.params.username
+      }, function(err, user) {
+        var count, followings, localData, page, start;
+        if (user) {
+          page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
+          localData = {
+            title: user.nick + "的关注",
+            pageUser: user,
+            isLoggedIn: false,
+            page: page,
+            userNav: 'following'
+          };
+          if (req.currentUser) {
+            localData.isSelf = req.currentUser.username === user.username;
+            user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
+            localData.user = req.currentUser;
+            localData.isLoggedIn = true;
+            localData.uri = req.url;
+            count = 0;
+            start = (page - 1) * 10;
+            console.log(start);
+            localData.users = [];
+            followings = user.following.slice(start, start + 10);
+            console.log(followings);
+            if (followings.length) {
+              return followings.forEach(function(following, index, list) {
+                return db.user.findById(following, function(err, user) {
+                  localData.users.push(user);
+                  count++;
+                  if (count === list.length) {
+                    console.log(localData.users);
+                    return res.render('follow', localData);
+                  }
+                });
+              });
+            } else {
+              return res.render('follow', localData);
+            }
+          } else {
+            return res.render('follow', localData);
+          }
+        } else {
+          return res.send(err);
+        }
+      });
+    });
+    app.get('/user/:username/follower', loadUser, function(req, res) {
+      return db.user.findOne({
+        username: req.params.username
+      }, function(err, user) {
+        var count, followers, localData, page, start;
+        if (user) {
+          page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
+          localData = {
+            title: user.nick + "的关注",
+            pageUser: user,
+            isLoggedIn: false,
+            page: page,
+            userNav: 'follower'
+          };
+          if (req.currentUser) {
+            localData.isSelf = req.currentUser.username === user.username;
+            user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
+            localData.user = req.currentUser;
+            localData.isLoggedIn = true;
+            localData.uri = req.url;
+            count = 0;
+            start = (page - 1) * 10;
+            console.log(start);
+            localData.users = [];
+            followers = user.follower.slice(start, start + 10);
+            console.log(followers);
+            if (followers.length) {
+              return followers.forEach(function(follower, index, list) {
+                return db.user.findById(follower, function(err, user) {
+                  localData.users.push(user);
+                  count++;
+                  if (count === list.length) {
+                    console.log(localData.users);
+                    return res.render('follow', localData);
+                  }
+                });
+              });
+            } else {
+              return res.render('follow', localData);
+            }
+          } else {
+            return res.render('follow', localData);
           }
         } else {
           return res.send(err);
@@ -336,7 +575,6 @@
             }, {
               safe: true
             }, function(err, count) {
-              console.log('following err', err);
               console.log('following count', count);
               return db.user.update({
                 _id: user._id,
@@ -354,7 +592,6 @@
                 safe: true
               }, function(err, count) {
                 console.log('follower count', count);
-                console.log('follower err', err);
                 return res.send('success');
               });
             });
@@ -386,7 +623,6 @@
             }, {
               safe: true
             }, function(err, count) {
-              console.log('unfollowing err', err);
               console.log('unfollowing count', count);
               return db.user.update({
                 _id: user._id,
@@ -402,7 +638,6 @@
                 safe: true
               }, function(err, count) {
                 console.log('follower count', count);
-                console.log('follower err', err);
                 return res.send('success');
               });
             });
@@ -438,66 +673,35 @@
         _user = req.currentUser;
         return req.form.emit('callback', function(err, fields, files) {
           var format, formats, post;
-          if (err) {
-            return console.log(err);
-          } else {
-            console.log('file', files);
-            console.log('\nuploaded %s to %s', files.audio.filename, files.audio.path);
-            format = files.audio.filename.substr(files.audio.filename.lastIndexOf('.') + 1);
-            console.log('format', format);
-            formats = ['mp3', 'wav', 'ogg', 'mp4'];
-            if (formats.indexOf(format) === -1) {
-              return res.redirect('back');
-            }
-            post = {
-              text: fields.text,
-              u_id: _user._id,
-              format: format,
-              time: 52846,
-              date: new Date()
-            };
-            return db.post.insert(post, function(err, replies) {
-              var db1;
-              console.log('saved post', replies);
-              db.user.updateById(post.u_id.toString(), {
-                '$inc': {
-                  num_posts: 1
-                }
-              });
-              db1 = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
-                auto_reconnect: false
-              }));
-              return db1.open(function(err, db1) {
-                return db1.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
-                  var gridStore;
-                  console.log('err', err);
-                  gridStore = new GridStore(db1, replies[0]._id.toString(), "w", {
-                    'content_type': 'audio/' + format,
-                    'root': 'audio',
-                    metadata: {
-                      format: format
-                    }
-                  });
-                  return gridStore.open(function(err, gridStore) {
-                    console.log('open err', err);
-                    return gridStore.writeFile(files.audio.path, function(err, result) {
-                      console.log('write err', err);
-                      gridStore.close(function(err, result) {
-                        db1.close();
-                        return fs.unlink(files.audio.path, function(err) {
-                          if (err) {
-                            console.log(err);
-                          }
-                          return console.log('successfully deleted %s', files.audio.path);
-                        });
-                      });
-                      return res.redirect('/');
-                    });
-                  });
-                });
-              });
-            });
+          console.log('file', files);
+          console.log('\nuploaded %s to %s', files.audio.filename, files.audio.path);
+          format = files.audio.filename.substr(files.audio.filename.lastIndexOf('.') + 1);
+          console.log('format', format);
+          formats = ['mp3', 'wav', 'ogg', 'mp4'];
+          if (formats.indexOf(format) === -1) {
+            return res.redirect('back');
           }
+          post = {
+            text: fields.text,
+            u_id: _user._id,
+            format: format,
+            time: 52846,
+            date: new Date()
+          };
+          return db.post.insert(post, function(err, replies) {
+            console.log('saved post', replies);
+            db.user.updateById(post.u_id.toString(), {
+              '$inc': {
+                num_posts: 1
+              }
+            });
+            return audioFS.writeFile(replies[0]._id.toString(), files.audio.path, function(err, result) {
+              fs.unlink(files.audio.path, function(err) {
+                return console.log('successfully deleted %s', files.audio.path);
+              });
+              return res.redirect('/');
+            });
+          });
         });
       } else {
         return res.redirect('/');
@@ -505,7 +709,6 @@
     });
     app.del('/post/:id.:format?', loadUser, function(req, res) {
       return db.post.removeById(req.params.id, function(err, p) {
-        var griddb;
         db.comment.remove({
           p_id: db.comment.id(req.params.id)
         }, function(err, comment) {
@@ -516,75 +719,28 @@
             num_posts: -1
           }
         });
-        griddb = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
-          auto_reconnect: false
-        }));
-        griddb.open(function(err, griddb) {
-          return GridStore.unlink(griddb, req.params.id, {
-            'content_type': 'audio/mpeg',
-            'root': 'audio'
-          }, function(err, content) {
-            console.log('err', err);
-            return griddb.close();
-          });
-        });
+        audioFS.unlink(req.params.id, function(err) {});
         return res.send('1');
       });
     });
     app.get('/audio/:id.:format', function(req, res) {
-      var griddb;
-      griddb = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
-        auto_reconnect: false
-      }));
-      return griddb.open(function(err, griddb) {
-        return griddb.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
-          var gridStore;
-          gridStore = new GridStore(griddb, req.params.id, "r", {
-            'content_type': 'audio/mpeg',
-            'root': 'audio'
-          });
-          return gridStore.open(function(err, gridStore) {
-            var fileStream;
-            res.contentType('audio/' + req.params.format);
-            fileStream = gridStore.stream(true);
-            fileStream.on('error', function(error) {
-              return console.log('error', error);
-            });
-            fileStream.on('end', function(end) {
-              console.log('end');
-              return griddb.close();
-            });
-            return fileStream.pipe(res);
-          });
-        });
+      return audioFS.stream(req.params.id, function(err, stream) {
+        res.contentType('audio/' + req.params.format);
+        return stream.pipe(res);
       });
     });
     return app.get('/avatar/:id', function(req, res) {
-      var griddb;
-      griddb = new Db(configArgs.mongo.dbname, new Server(configArgs.mongo.host, configArgs.mongo.port, {
-        auto_reconnect: false
-      }));
-      return griddb.open(function(err, griddb) {
-        return griddb.authenticate(configArgs.mongo.account, configArgs.mongo.password, function(err, success) {
-          var gridStore;
-          gridStore = new GridStore(griddb, req.params.id, "r", {
-            'content_type': 'image/jpeg',
-            'root': 'avatar'
-          });
-          return gridStore.open(function(err, gridStore) {
-            var fileStream;
+      var _filename;
+      _filename = req.params.id;
+      return avatarFS.exist(_filename, function(err, exist) {
+        if (exist) {
+          return avatarFS.stream(_filename, function(err, stream) {
             res.contentType('image/jpeg');
-            fileStream = gridStore.stream(true);
-            fileStream.on('error', function(error) {
-              return console.log('error', error);
-            });
-            fileStream.on('end', function(end) {
-              console.log('end');
-              return griddb.close();
-            });
-            return fileStream.pipe(res);
+            return stream.pipe(res);
           });
-        });
+        } else {
+          return res.sendfile('public/images/avatar-default-60.png');
+        }
       });
     });
   };

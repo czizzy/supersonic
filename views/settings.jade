@@ -1,12 +1,14 @@
 extends body
 block body
-	h2 用户设置
-	form(method='post', action='/user', enctype="multipart/form-data")
-		div
-			label 昵称:
-			input(name='nick', type="text", value=user.nick)
-		div
-			label 头像:
-			input(name='avatar', type="file")
-		div
-			input(type='submit', value='保存')
+	#form-container
+		h2 用户设置
+		form.verify-form(method='post', action='/user', enctype="multipart/form-data")
+			p
+				label 昵称:
+				input#nick(name='nick', type="text", value=user.nick)
+				span
+			p
+				label 头像:
+				input(name='avatar', type="file")
+			p
+				input(type='submit', value='保存', class="button")

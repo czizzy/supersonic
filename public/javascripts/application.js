@@ -19,6 +19,7 @@ $(function(){
 		initialize: function(p){
 			var model = this;
 			model.id = model.get('_id');
+			model.url = '/post/'+model.id;
 			model.set({audio: soundManager.createSound({
 				id: 'a_'+model.get('_id'),
 				url: '/audio/'+model.get('_id')+'.'+model.get('format'),
@@ -76,7 +77,7 @@ $(function(){
 	});
 	var PostList = Backbone.Collection.extend({
 		model:Post,
-		url: '/post'
+		url: '/feeds'
 	});
 	var PostView = Backbone.View.extend({
 		tagName: 'li',
@@ -147,7 +148,7 @@ $(function(){
 			var _view = this;
 			if (confirm('Are you sure you want to delete that item?') ){
 				var $element = $(this.el);
-				console.log(this.model.url());
+				console.log(this.model.url);
 				this.model.destroy({success: function(model, res){
 					if(res == '1'){
 						_view.unrender();
@@ -219,21 +220,39 @@ $(function(){
 	var PostListView = Backbone.View.extend({
 		el: $('ul#posts'),
 		tagName: 'ul',
+		events: {
+			'click #feed-more a': 'getMore'
+		},
 		initialize: function(){
-			// _.bindAll(this, 'removeItem');
+			//_.bindAll(this, 'render');
 			this.collection = new PostList();
 			//this.collection.bind('destroy', this.removeItem);
 			console.log('collectin', this.collection);
 		},
 		render: function(posts){
 			var element = this.el, _view = this;
-			_.each(posts, function(p) {
+			element.find('li#feed-more').remove();
+			_.each(posts.items, function(p) {
+				console.log('p', p);
 				var pModel = new Post(p);
 				_view.collection.add(pModel);
 				pModel.view = new PostView({ model: pModel });
 				element.append(pModel.view.render().el);
 			});
-		}// ,
+			_view.collection.hasMore = posts.hasMore;
+			if(posts.hasMore){
+				_view.collection.lastDt = posts.items[9].date;
+				element.append('<li id="feed-more"><a href="javascript:void(0)">更多动态</a></li>');
+			}
+		},
+		getMore: function(){
+			var _view = this;
+			_view.collection.fetch({data:{dt:this.collection.lastDt}, success:function(collection, response){
+				console.log(collection,response);
+				_view.render(response);
+			}});
+			console.log(this.collection.lastDt);
+		}//,
 		// removeItem: function(){
 		// 	console.log('remove', this.collection);
 		// }

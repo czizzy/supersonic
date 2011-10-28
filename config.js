@@ -1,12 +1,13 @@
 (function() {
   exports.config = {
+    env: 'development',
     mongo: {
-      dbname: 'kmmvqn09zzrch',
+      dbname: 'supersonic',
       host: '127.0.0.1',
-      account: 'cequa39aqu4j0',
-      password: '2r01a5ox45o',
-      port: 20088
+      account: '',
+      password: '',
+      port: 27017
     },
-    port: 80
+    port: 3000
   };
 }).call(this);

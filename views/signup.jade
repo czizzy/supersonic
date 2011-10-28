@@ -1,22 +1,25 @@
 extends body
 block body
-	h2 注册
-	form.verify-form(method='post', action='/signup')
-		div
-			label 用户名:
-				input#username(name='user[username]', required)
+	#form-container
+		p#slog 欢迎加入我们，在这里，你可以分享你身边的声音
+		form.verify-form(method='post', action='/signup')
+			p
+				label 用户名:
+				input#username(name='user[username]', required, type="text")
 				span
-		div
-			label 邮箱:
-				input#email(name='user[email]', required)
+			p
+				label 邮箱:
+				input#email(name='user[email]', required, type="text")
 				span
-		div
-			label 密码:
+			p
+				label 密码:
 				input#password(type='password', name='user[password]', required)
 				span
-		div
-			label 确认密码:
+			p
+				label 确认密码:
 				input#confirm(type='password', name='user[confirm_password]', required)
 				span
-		div
-			input(type='submit', value='注册')
+			p
+				input.button(type='submit', value='注册')
+				span.signup 已有帐号？
+					a(href='/') 登录
