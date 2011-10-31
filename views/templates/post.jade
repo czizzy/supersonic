@@ -1,8 +1,8 @@
 script#post-item-template(type="text/html")
 	div.track-info.clearfix
-		<% print('<a class="avatar" href="/user/' + Util.htmlspecialchars(username) + '"><img height="48" width="48" src="/avatar/' + u_id +'?size=48" /></a>'); %>
+		<% var avatar = user.avatar?(user.avatar+'?size=48'):'/images/avatar-default-48.png'; print('<a class="avatar" href="/user/' + Util.htmlspecialchars(user.username) + '"><img height="48" width="48" src="' + avatar + '"/></a>'); %>
 		div.track-content
-			<% print('<p class="track-title">' + Util.htmlspecialchars(usernick) + ' - ' + Util.htmlspecialchars(text) + '</p>'); %>
+			<% print('<p class="track-title">' + Util.htmlspecialchars(user.nick) + ' - ' + Util.htmlspecialchars(text) + '</p>'); %>
 			p.track-time
 				!=partial('partials/time')
 				- if (typeof(isSelf) != 'undefined' && isSelf)

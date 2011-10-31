@@ -161,9 +161,7 @@ $(function(){
 				id: this.model.get('_id'),
 				format: this.model.get('format'),
 				text: this.model.get('text'),
-				username: this.model.get('user').username,
-				u_id: this.model.get('user')._id,
-				usernick: this.model.get('user').nick,
+				user: this.model.get('user'),
 				date: this.model.get('date'),
 				comments: this.model.get('comments'),
 				time: this.model.get('time')

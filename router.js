@@ -342,7 +342,9 @@
         return req.form.emit('callback', function(err, fields, files) {
           console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
           if (fields.nick) {
-            db.user.updateById(_user._id.toString(), {
+            db.user.update({
+              _id: _user._id
+            }, {
               '$set': {
                 nick: fields.nick
               }
@@ -360,28 +362,45 @@
                   dstPath: cropPath,
                   width: size
                 }, function(err, stdout, stderr) {
-                  var avatarData, resizeFunc;
+                  var avatarData, avatarVer;
                   fs.unlink(files.avatar.path, function(err) {
                     return console.log('successfully deleted %s', files.avatar.path);
                   });
                   avatarData = fs.readFileSync(cropPath, 'binary');
-                  resizeFunc = function(size, cb) {
-                    return im.resize({
-                      srcData: avatarData,
-                      width: size,
-                      format: 'jpg'
-                    }, function(err, stdout, stderr) {
-                      return avatarFS.write(_user._id.toString() + '_' + size, stdout, function(err, result) {
-                        return cb();
+                  avatarVer = parseInt(Math.random() * 10000);
+                  return async.parallel([
+                    function(callback) {
+                      return db.user.update({
+                        _id: _user._id
+                      }, {
+                        '$set': {
+                          avatar: '/avatar/' + _user._id.toString() + '/' + avatarVer
+                        }
+                      }, function(err, count) {
+                        return callback(err, count);
                       });
-                    });
-                  };
-                  return async.forEach([128, 48, 32], resizeFunc, function(err) {
-                    console.log('complete');
-                    return fs.unlink(cropPath, function(err) {
-                      console.log('successfully deleted %s', cropPath);
-                      return res.redirect('/user/' + _user.username);
-                    });
+                    }, function(callback) {
+                      var resizeFunc;
+                      resizeFunc = function(size, cb) {
+                        return im.resize({
+                          srcData: avatarData,
+                          width: size,
+                          format: 'jpg'
+                        }, function(err, stdout, stderr) {
+                          return avatarFS.write(_user._id.toString() + '_' + size, stdout, function(err, result) {
+                            return cb();
+                          });
+                        });
+                      };
+                      return async.forEach([128, 48, 32], resizeFunc, function(err) {
+                        fs.unlink(cropPath, function(err) {
+                          return console.log('successfully deleted %s', cropPath);
+                        });
+                        return callback(err);
+                      });
+                    }
+                  ], function(err, results) {
+                    return res.redirect('/user/' + _user.username);
                   });
                 });
               } else {
@@ -634,25 +653,38 @@
                 if (err.code === 11000) {
                   return res.send('success');
                 } else {
-                  return next(err);
+                  return res.send(err);
                 }
               } else {
-                return db.user.update({
-                  _id: currentUser._id
-                }, {
-                  $inc: {
-                    num_following: 1
+                return async.parallel([
+                  function(callback) {
+                    return db.user.update({
+                      _id: currentUser._id
+                    }, {
+                      $inc: {
+                        num_following: 1
+                      }
+                    }, function(err, count) {
+                      return callback(err, count);
+                    });
+                  }, function(callback) {
+                    return db.user.update({
+                      _id: user._id
+                    }, {
+                      $inc: {
+                        num_follower: 1
+                      }
+                    }, function(err, count) {
+                      return callback(err, count);
+                    });
                   }
-                }, function(err, count) {
-                  return db.user.update({
-                    _id: user._id
-                  }, {
-                    $inc: {
-                      num_follower: 1
-                    }
-                  }, function(err, count) {
+                ], function(err, results) {
+                  if (err != null) {
+                    return res.send(err);
+                  } else {
+                    console.log('follow', results);
                     return res.send('success');
-                  });
+                  }
                 });
               }
             });
@@ -670,28 +702,44 @@
         currentUser = req.currentUser;
         return db.user.findById(req.params.id, function(err, user) {
           if (user) {
-            console.log('unfollow user', user);
             return db.follow.remove({
               from: currentUser._id,
               to: user._id
             }, function(err, follow) {
-              return db.user.update({
-                _id: currentUser._id
-              }, {
-                $inc: {
-                  num_following: -1
-                }
-              }, function(err, count) {
-                return db.user.update({
-                  _id: user._id
-                }, {
-                  $inc: {
-                    num_follower: -1
+              if ((err != null)) {
+                return res.send(err);
+              } else {
+                return async.parallel([
+                  function(callback) {
+                    return db.user.update({
+                      _id: currentUser._id
+                    }, {
+                      $inc: {
+                        num_following: -1
+                      }
+                    }, function(err, count) {
+                      return callback(err, count);
+                    });
+                  }, function(callback) {
+                    return db.user.update({
+                      _id: user._id
+                    }, {
+                      $inc: {
+                        num_follower: -1
+                      }
+                    }, function(err, count) {
+                      return callback(err, count);
+                    });
                   }
-                }, function(err, count) {
-                  return res.send('success');
+                ], function(err, results) {
+                  if (err != null) {
+                    return res.send(err);
+                  } else {
+                    console.log('unfollow', results);
+                    return res.send('success');
+                  }
                 });
-              });
+              }
             });
           } else {
             return res.send('error');
@@ -780,20 +828,14 @@
         return stream.pipe(res);
       });
     });
-    return app.get('/avatar/:id', function(req, res) {
+    return app.get('/avatar/:id/:ver', function(req, res) {
       var size, _filename;
       size = req.query.size;
       if (size === '32' || size === '48' || size === '128') {
         _filename = req.params.id + '_' + size;
-        return avatarFS.exist(_filename, function(err, exist) {
-          if (exist) {
-            return avatarFS.stream(_filename, function(err, stream) {
-              res.contentType('image/jpeg');
-              return stream.pipe(res);
-            });
-          } else {
-            return res.sendfile('public/images/avatar-default-' + size + '.png');
-          }
+        return avatarFS.stream(_filename, function(err, stream) {
+          res.contentType('image/jpeg');
+          return stream.pipe(res);
         });
       } else {
         return res.end('size should be 32, 48, 128');

@@ -138,7 +138,7 @@ a.handling { color:#666; }
 
 #user-container { padding:15px; }
 #user-info { margin-bottom:20px; }
-#user-avatar { float:left; }
+#user-avatar { float:left; width:96px; height:96px; }
 #user-content { float:left; margin-left:14px; width:820px; }
 #user-content .nick { font-size:28px; font-weight:bold; line-height:30px; margin-top:7px;}
 #user-content .nick span { font-size:14px; color:#666; margin-left:10px; }

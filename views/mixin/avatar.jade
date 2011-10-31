@@ -1,0 +1,5 @@
+mixin avatar(user, size, id, class)
+	- if(user.avatar)
+		img(height="#{size?size:48}", width="#{size?size:48}", id="#{id?id:''}", class="#{class?class:'avatar'}", src="#{user.avatar}?size=#{size?size:48}")
+	- else
+		img(height="#{size?size:48}", width="#{size?size:48}", id="#{id?id:''}", class="#{class?class:'avatar'}", src="/images/avatar-default-#{size?size:48}.png")

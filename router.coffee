@@ -200,7 +200,6 @@ route = (app) ->
                 req.session.destroy()
         res.redirect '/'
 
-
     app.get '/post/new', loadUser, (req, res) ->
         if req.currentUser
             res.render 'post/new', { title:'new post', p:{}}
@@ -217,7 +216,7 @@ route = (app) ->
             req.form.emit 'callback', (err, fields, files) ->
                 console.log '\nuploaded %s to %s', files.avatar.filename, files.avatar.path
                 if(fields.nick)
-                    db.user.updateById _user._id.toString(), {'$set': {nick: fields.nick}}
+                    db.user.update {_id:_user._id}, {'$set': {nick: fields.nick}}
                 if(files.avatar.size>0)
                     im.identify files.avatar.path, (err, features)->
                         imageFormats = ['JPEG', 'PNG', 'GIF']
@@ -228,15 +227,22 @@ route = (app) ->
                                 fs.unlink files.avatar.path, (err) ->
                                     console.log 'successfully deleted %s', files.avatar.path
                                 avatarData = fs.readFileSync(cropPath, 'binary')
-                                resizeFunc = (size, cb) ->
-                                    im.resize {srcData: avatarData, width: size, format: 'jpg'}, (err, stdout, stderr) ->
-                                        avatarFS.write _user._id.toString()+'_'+size, stdout, (err, result) ->
-                                            cb()
-                                async.forEach [128, 48, 32], resizeFunc, (err)->
-                                    console.log 'complete'
-                                    fs.unlink cropPath, (err) ->
-                                        console.log 'successfully deleted %s', cropPath
-                                        res.redirect '/user/'+_user.username
+                                avatarVer = parseInt(Math.random()*10000)
+                                async.parallel [
+                                    (callback)->
+                                        db.user.update {_id: _user._id }, {'$set':{avatar:'/avatar/'+_user._id.toString()+'/'+avatarVer}}, (err, count)->
+                                            callback err, count
+                                    (callback)->
+                                        resizeFunc = (size, cb) ->
+                                            im.resize {srcData: avatarData, width: size, format: 'jpg'}, (err, stdout, stderr) ->
+                                                avatarFS.write _user._id.toString()+'_'+size, stdout, (err, result) ->
+                                                    cb()
+                                        async.forEach [128, 48, 32], resizeFunc, (err)->
+                                            fs.unlink cropPath, (err) ->
+                                                console.log 'successfully deleted %s', cropPath
+                                            callback err
+                                ], (err, results)->
+                                    res.redirect '/user/'+_user.username
                         else
                             req.flash 'error', '不支持的图像格式'
                             res.render 'settings', {title: '个人设置', user:_user}
@@ -383,10 +389,20 @@ route = (app) ->
                         if err?
                             if err.code is 11000
                                 res.send 'success'
-                            else next(err)
+                            else res.send err
                         else
-                            db.user.update {_id:currentUser._id}, {$inc: {num_following: 1}}, (err, count)->
-                                db.user.update {_id:user._id}, {$inc: {num_follower: 1}}, (err, count)->
+                            async.parallel [
+                                (callback)->
+                                    db.user.update {_id:currentUser._id}, {$inc: {num_following: 1}}, (err, count)->
+                                        callback err, count
+                                (callback)->
+                                    db.user.update {_id:user._id}, {$inc: {num_follower: 1}}, (err, count)->
+                                        callback err, count
+                            ], (err, results)->
+                                if err?
+                                    res.send err
+                                else
+                                    console.log 'follow', results
                                     res.send 'success'
                 else res.send 'user not found'
         else
@@ -397,11 +413,23 @@ route = (app) ->
             currentUser = req.currentUser
             db.user.findById req.params.id, (err, user) ->
                 if (user)
-                    console.log 'unfollow user', user
                     db.follow.remove {from:currentUser._id, to:user._id}, (err, follow) ->
-                        db.user.update {_id:currentUser._id}, {$inc: {num_following: -1}}, (err, count)->
-                            db.user.update {_id:user._id}, {$inc: {num_follower: -1}}, (err, count)->
-                                res.send 'success'
+                        if(err?)
+                            res.send err
+                        else
+                            async.parallel [
+                                (callback)->
+                                    db.user.update {_id:currentUser._id}, {$inc: {num_following: -1}}, (err, count)->
+                                        callback(err, count)
+                                (callback)->
+                                    db.user.update {_id:user._id}, {$inc: {num_follower: -1}}, (err, count)->
+                                        callback(err, count)
+                            ], (err, results)->
+                                if err?
+                                    res.send err
+                                else
+                                    console.log 'unfollow', results
+                                    res.send 'success'
                 else res.send 'error'
         else
             res.send 'error'
@@ -460,16 +488,16 @@ route = (app) ->
             res.contentType 'audio/'+req.params.format
             stream.pipe(res)
 
-    app.get '/avatar/:id', (req, res) ->
+    app.get '/avatar/:id/:ver', (req, res) ->
         size=req.query.size
         if size is '32' or size is '48' or size is '128'
             _filename = req.params.id + '_' + size
-            avatarFS.exist _filename, (err, exist) ->
-                if exist
-                    avatarFS.stream _filename, (err, stream) ->
-                        res.contentType 'image/jpeg'
-                        stream.pipe(res)
-                else res.sendfile('public/images/avatar-default-'+size+'.png')
+            # avatarFS.exist _filename, (err, exist) ->
+            #     if exist
+            avatarFS.stream _filename, (err, stream) ->
+                res.contentType 'image/jpeg'
+                stream.pipe(res)
+                # else res.sendfile('public/images/avatar-default-'+size+'.png')
         else res.end 'size should be 32, 48, 128'
 
 exports.route = route

@@ -1,6 +1,7 @@
 extends body
 block body
 	include mixin/page
+	include mixin/avatar
 	div#user-container
 		!=partial('partials/userHeader')
 		- if(typeof users != 'undefined' && users.length)
@@ -8,17 +9,17 @@ block body
 				each user in users
 					li.clearfix 
 						a(href="/user/#{user.username}")
-							img.avatar(src="/avatar/#{user._id}?size=48", height="48", width="48")
+							mixin avatar(user) 
 						div.nick
 							a(href="/user/#{user.username}")
 								#{user.nick}
 						- if(isSelf && userNav == 'following')
 							a.unfollow.button(href="javascript:void(0)", data-id="#{user._id}") 取消关注
 			- if (userNav == 'following')
-				- if(pageUser.following.length > 10)
+				- if(pageUser.num_following > 10)
 					mixin page(pageUser.num_following, uri, page)			
 			- else 
-				- if(pageUser.follower.length > 10)
+				- if(pageUser.num_follower > 10)
 					mixin page(pageUser.num_follower, uri, page)
 		- else
 			p 还没有关注

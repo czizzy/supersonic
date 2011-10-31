@@ -1,5 +1,6 @@
+include ../mixin/avatar
 div#user-info.clearfix 
-	img#user-avatar(src="/avatar/"+ pageUser._id+"?size=128", width="96", height="96")
+	mixin avatar(pageUser, 128, 'user-avatar')
 	div#user-content
 		p.nick #{pageUser.nick}
 			if(isLoggedIn && !isSelf)

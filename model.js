@@ -17,6 +17,7 @@
       this.num_posts = obj.num_posts != null ? obj.num_posts : 0;
       this.num_following = obj.num_following != null ? obj.num_following : 0;
       this.num_follower = obj.num_follower != null ? obj.num_follower : 0;
+      this.avatar = obj.avatar != null ? obj.avatar : null;
       if (obj._id != null) {
         this._id = obj._id;
       }
