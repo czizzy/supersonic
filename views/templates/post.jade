@@ -1,6 +1,6 @@
 script#post-item-template(type="text/html")
 	div.track-info.clearfix
-		<% print('<a class="avatar" href="/user/' + Util.htmlspecialchars(username) + '"><img height="48" width="48" src="/avatar/' + u_id +'" /></a>'); %>
+		<% print('<a class="avatar" href="/user/' + Util.htmlspecialchars(username) + '"><img height="48" width="48" src="/avatar/' + u_id +'?size=48" /></a>'); %>
 		div.track-content
 			<% print('<p class="track-title">' + Util.htmlspecialchars(usernick) + ' - ' + Util.htmlspecialchars(text) + '</p>'); %>
 			p.track-time
@@ -14,4 +14,4 @@ script#post-item-template(type="text/html")
 			p.progress audio
 			div.comment-bar &nbsp;
 				ul
-					<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+Util.htmlspecialchars(comment.body)+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'" height="18" width="18"/></li>') }); %>
+					<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+Util.htmlspecialchars(comment.body)+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'?size=32" height="18" width="18"/></li>') }); %>

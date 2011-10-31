@@ -1,7 +1,6 @@
 ##
  # Module dependencies.
  #
-
 configArgs = require('./config.js').config
 express = require 'express'
 form = require 'connect-form'
@@ -12,6 +11,10 @@ Server = require('mongodb').Server
 app = module.exports = express.createServer()
 sys = require 'sys'
 api = require './api.js'
+GridFS = require('./gridfs.js').GridFS
+app.avatarFS = new GridFS { root:'avatar',"content_type": "image/jpeg", "chunk_size": 1024*64 }
+app.audioFS = new GridFS { root:'audio',"content_type": "audio/mp3" }
+
 app.helpers require('./helpers.js').helpers
 app.dynamicHelpers require('./helpers.js').dynamicHelpers;
 app.settings.env = configArgs.env
@@ -37,10 +40,8 @@ app.configure () ->
     app.use(express.static(__dirname + '/public'))
     # error handling
 
-
 app.configure 'development', () ->
     app.use(express.errorHandler({ dumpExceptions: true, showStack: true }))
-
 
 app.configure 'production', () ->
     app.use (err, req, res, next) ->
@@ -49,20 +50,24 @@ app.configure 'production', () ->
             status:500,
             locals: { title:'500', error: err}
 
-
 db.bind 'user'
 db.bind 'loginToken'
 db.bind 'post'
 db.bind 'comment'
+db.bind 'follow'
 
 db.user.ensureIndex {'username':1}, true, (err)->
-    console.log 'index err', err
+    console.log 'user index username', err
 db.comment.ensureIndex {'p_id':1}, false, (err)->
-    console.log 'index err', err
-db.post.dropIndex {'u_id':1}, false, (err)->
-    console.log 'drop err', err
+    console.log 'comment index p_id', err
+# db.post.dropIndex {'u_id':1}, false, (err)->
+#     console.log 'drop err', err
 db.post.ensureIndex {date:-1, u_id:1}, false, (err)->
-    console.log 'index err', err
+    console.log 'post index', err
+db.follow.ensureIndex {from:1, to:1}, true, (err)->
+    console.log 'follow index from'
+db.follow.ensureIndex {to:1}, false, (err)->
+    console.log 'follow index to'
 
 # Routes
 router.route app

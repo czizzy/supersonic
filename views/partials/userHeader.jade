@@ -1,8 +1,8 @@
 div#user-info.clearfix 
-	img#user-avatar(src="/avatar/"+ pageUser._id, width="96", height="96")
+	img#user-avatar(src="/avatar/"+ pageUser._id+"?size=128", width="96", height="96")
 	div#user-content
 		p.nick #{pageUser.nick}
-			if(!isSelf)
+			if(isLoggedIn && !isSelf)
 				if(pageUser.isFollowing)
 					span 已关注
 		p.actions
@@ -23,13 +23,13 @@ ul#user-nav.clearfix
 			a(href="/user/#{pageUser.username}") 动态 (#{pageUser.num_posts})
 	- if(userNav == 'following')
 		li.active 
-			span 关注 (#{pageUser.following.length})
+			span 关注 (#{pageUser.num_following})
 	- else
 		li
-			a(href="/user/#{pageUser.username}/following") 关注 (#{pageUser.following.length})
+			a(href="/user/#{pageUser.username}/following") 关注 (#{pageUser.num_following})
 	- if(userNav == 'follower')
 		li.active 
-			span 粉丝 (#{pageUser.follower.length})
+			span 粉丝 (#{pageUser.num_follower})
 	- else 
 		li 
-			a(href="/user/#{pageUser.username}/follower") 粉丝 (#{pageUser.follower.length})
+			a(href="/user/#{pageUser.username}/follower") 粉丝 (#{pageUser.num_follower})

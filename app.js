@@ -1,5 +1,5 @@
 (function() {
-  var Server, api, app, configArgs, db, express, form, mongo, mongoStore, router, server_config, sys;
+  var GridFS, Server, api, app, configArgs, db, express, form, mongo, mongoStore, router, server_config, sys;
   configArgs = require('./config.js').config;
   express = require('express');
   form = require('connect-form');
@@ -10,6 +10,16 @@
   app = module.exports = express.createServer();
   sys = require('sys');
   api = require('./api.js');
+  GridFS = require('./gridfs.js').GridFS;
+  app.avatarFS = new GridFS({
+    root: 'avatar',
+    "content_type": "image/jpeg",
+    "chunk_size": 1024 * 64
+  });
+  app.audioFS = new GridFS({
+    root: 'audio',
+    "content_type": "audio/mp3"
+  });
   app.helpers(require('./helpers.js').helpers);
   app.dynamicHelpers(require('./helpers.js').dynamicHelpers);
   app.settings.env = configArgs.env;
@@ -65,26 +75,33 @@
   db.bind('loginToken');
   db.bind('post');
   db.bind('comment');
+  db.bind('follow');
   db.user.ensureIndex({
     'username': 1
   }, true, function(err) {
-    return console.log('index err', err);
+    return console.log('user index username', err);
   });
   db.comment.ensureIndex({
     'p_id': 1
   }, false, function(err) {
-    return console.log('index err', err);
-  });
-  db.post.dropIndex({
-    'u_id': 1
-  }, false, function(err) {
-    return console.log('drop err', err);
+    return console.log('comment index p_id', err);
   });
   db.post.ensureIndex({
     date: -1,
     u_id: 1
   }, false, function(err) {
-    return console.log('index err', err);
+    return console.log('post index', err);
+  });
+  db.follow.ensureIndex({
+    from: 1,
+    to: 1
+  }, true, function(err) {
+    return console.log('follow index from');
+  });
+  db.follow.ensureIndex({
+    to: 1
+  }, false, function(err) {
+    return console.log('follow index to');
   });
   router.route(app);
   api.start(app);

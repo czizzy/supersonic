@@ -17,8 +17,6 @@ class User
         @num_posts = if obj.num_posts? then obj.num_posts else 0
         @num_following = if obj.num_following? then obj.num_following else 0
         @num_follower = if obj.num_follower? then obj.num_follower else 0
-        @following = if obj.following? then obj.following else []
-        @follower = if obj.follower? then obj.follower else []
         @_id = obj._id if obj._id?
 
 

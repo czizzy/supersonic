@@ -33,10 +33,8 @@
       return db.user.findOne({
         username: basicUser.username
       }, function(err, getedUser) {
-        console.log('geted', getedUser);
         if (getedUser != null) {
           getedUser = new User(getedUser);
-          console.log('auth', getedUser);
           if (getedUser.authenticate(basicUser.password)) {
             delete getedUser.hashed_password;
             delete getedUser.salt;
@@ -72,7 +70,9 @@
     }
   };
   start = function(app) {
+    var audioFS;
     db = app.db;
+    audioFS = app.audioFS;
     app.get('/api/account/verify_credentials.json', httpAuthUser, function(req, res) {
       if (req.currentUser != null) {
         return res.send(req.currentUser);
@@ -86,8 +86,6 @@
         _user = req.currentUser;
         return req.form.emit('callback', function(err, fields, files) {
           var format, formats, post;
-          console.log('post', fields);
-          console.log('file', files);
           console.log('\nuploaded %s to %s', files.audio.filename, files.audio.path);
           format = files.audio.filename.substr(files.audio.filename.lastIndexOf('.') + 1);
           console.log('format', format);
@@ -109,7 +107,6 @@
             date: new Date()
           };
           return db.post.insert(post, function(err, replies) {
-            console.log('insert err', err);
             console.log('post success', replies);
             db.user.updateById(post.u_id.toString(), {
               '$inc': {
@@ -127,7 +124,6 @@
       } else {
         req.form.emit('callback', function(err, fields, files) {
           return fs.unlink(files.audio.path, function(err) {
-            console.log('unlink', err);
             return console.log('successfully deleted %s', files.audio.path);
           });
         });

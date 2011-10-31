@@ -1,16 +1,16 @@
 (function() {
-  var GridFS, LoginToken, User, audioFS, avatarFS, fs, im, model, route;
+  var LoginToken, User, async, fs, im, model, route;
   model = require('./model.js');
-  GridFS = require('./gridfs.js').GridFS;
   LoginToken = model.LoginToken;
   User = model.User;
   im = require('imagemagick');
   fs = require('fs');
-  avatarFS = new GridFS('avatar');
-  audioFS = new GridFS('audio');
+  async = require('async');
   route = function(app) {
-    var authenticateFromLoginToken, db, getFeeds, getUser, loadUser;
+    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getUser, loadUser;
     db = app.db;
+    avatarFS = app.avatarFS;
+    audioFS = app.audioFS;
     authenticateFromLoginToken = function(req, res, next) {
       var cookie;
       cookie = JSON.parse(req.cookies.logintoken);
@@ -91,99 +91,90 @@
       feeds.hasMore = false;
       count = 0;
       hasFeedUsers = [];
-      console.log(currentUser);
-      currentUser.following.push(currentUser._id.toString());
-      console.log('following', currentUser.following);
-      return currentUser.following.forEach(function(item, index, list) {
-        return db.user.findById(item, function(err, user) {
+      return async.waterfall([
+        function(callback) {
+          return db.follow.findItems({
+            from: currentUser._id
+          }, {
+            limit: 1000
+          }, function(err, followings) {
+            followings = followings.map(function(item) {
+              return item.to;
+            });
+            followings.push(currentUser._id);
+            return callback(null, followings);
+          });
+        }, function(followings, callback) {
           var selector;
           if (lastDt) {
             selector = {
-              u_id: user._id,
+              u_id: {
+                $in: followings
+              },
               date: {
                 '$lt': lastDt
               }
             };
           } else {
             selector = {
-              u_id: user._id
+              u_id: {
+                $in: followings
+              }
             };
           }
-          return db.post.findItems(selector, {
+          return db.post.find(selector, {
             sort: {
               date: -1
             },
-            limit: 10,
-            skip: 0
-          }, function(err, posts) {
-            console.log(user.username, posts);
-            if (posts.length > 0) {
-              hasFeedUsers.push(user);
-            }
-            posts.forEach(function(post) {
-              post.user = user;
-              return feeds.items.push(post);
-            });
-            count++;
-            if (count === list.length) {
-              count = 0;
-              if (feeds.items.length) {
-                feeds.items.sort(function(a, b) {
-                  return b.date.getTime() - a.date.getTime();
+            limit: 10
+          }, function(err, postsCursor) {
+            return async.parallel({
+              count: function(cb) {
+                return postsCursor.count(function(err, count) {
+                  return cb(err, count);
                 });
-                feeds.hasMore = feeds.items.length > 10;
-                if (feeds.hasMore) {
-                  feeds.items = feeds.items.slice(0, 10);
-                }
-                return feeds.items.forEach(function(feed, index, list) {
-                  return db.comment.findItems({
-                    p_id: feed._id
-                  }, function(err, comments) {
-                    feed.comments = comments;
-                    console.log(feed.date);
-                    count++;
-                    if (count === list.length) {
-                      console.log('finish', feeds);
-                      if (hasFeedUsers.length === 1) {
-                        if (lastDt) {
-                          selector = {
-                            u_id: hasFeedUsers[0]._id,
-                            date: {
-                              '$lt': lastDt
-                            }
-                          };
-                        } else {
-                          selector = {
-                            u_id: hasFeedUsers[0]._id
-                          };
-                        }
-                        return db.post.find(selector, {
-                          sort: {
-                            date: -1
-                          },
-                          limit: 10,
-                          skip: 0
-                        }, function(err, cursor) {
-                          return cursor.count(function(err, count) {
-                            console.log('more count', count);
-                            feeds.hasMore = count > 10;
-                            return fn(feeds);
-                          });
-                        });
-                      } else {
-                        console.log('hasMore', feeds.hasMore);
-                        return fn(feeds);
-                      }
-                    }
-                  });
+              },
+              items: function(cb) {
+                return postsCursor.toArray(function(err, posts) {
+                  return cb(err, posts);
                 });
-              } else {
-                return fn(feeds);
               }
-            }
+            }, function(err, results) {
+              var posts;
+              feeds = {};
+              feeds.hasMore = results.count > 10;
+              posts = results.items;
+              return async.forEach(posts, function(item, cb) {
+                return async.parallel({
+                  comments: function(cb2) {
+                    return db.comment.findItems({
+                      p_id: item._id
+                    }, function(err, comments) {
+                      return cb2(err, comments);
+                    });
+                  },
+                  user: function(cb2) {
+                    return db.user.findOne({
+                      _id: item.u_id
+                    }, function(err, user) {
+                      return cb2(err, user);
+                    });
+                  }
+                }, function(err, results) {
+                  item.comments = results.comments;
+                  item.user = results.user;
+                  return cb(err);
+                });
+              }, function(err) {
+                feeds.items = posts;
+                console.log('feed', feeds);
+                fn(feeds);
+                return callback(null, 'done');
+              });
+            });
           });
-        });
-      });
+        }
+      ]);
     };
     app.get('/feeds', loadUser, function(req, res) {
       if (req.currentUser) {
@@ -198,7 +189,6 @@
     });
     app.get('/', loadUser, function(req, res) {
       if (req.currentUser) {
-        console.log(req.currentUser);
         return getFeeds(req.currentUser, null, function(feeds) {
           return res.render('home', {
             title: 'home',
@@ -230,7 +220,6 @@
       _user.confirm_password = _user.confirm_password.trim();
       _user.username = _user.username.trim();
       _user.email = _user.email.trim();
-      console.log(_user);
       if (_user.password === '' || _user.confirm_password === '' || _user.username === '' || _user.email === '') {
         req.flash('error', '字段不能为空');
         return res.render('signup', {
@@ -299,7 +288,6 @@
               loginToken = new LoginToken({
                 _id: user._id
               });
-              console.log(loginToken);
               db.loginToken.save(loginToken, function(err, count) {
                 return res.cookie('logintoken', loginToken.cookieValue(), {
                   expires: new Date(Date.now() + 2 * 604800000),
@@ -352,10 +340,7 @@
       if (req.currentUser) {
         _user = req.currentUser;
         return req.form.emit('callback', function(err, fields, files) {
-          console.log('fie', fields);
-          console.log('fil', files);
           console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
-          console.log('fields', fields);
           if (fields.nick) {
             db.user.updateById(_user._id.toString(), {
               '$set': {
@@ -366,7 +351,6 @@
           if (files.avatar.size > 0) {
             return im.identify(files.avatar.path, function(err, features) {
               var cropPath, imageFormats, size;
-              console.log('features', features);
               imageFormats = ['JPEG', 'PNG', 'GIF'];
               if ((features != null) && imageFormats.indexOf(features.format) !== -1) {
                 size = features.width <= features.height ? features.width : features.height;
@@ -376,10 +360,24 @@
                   dstPath: cropPath,
                   width: size
                 }, function(err, stdout, stderr) {
+                  var avatarData, resizeFunc;
                   fs.unlink(files.avatar.path, function(err) {
                     return console.log('successfully deleted %s', files.avatar.path);
                   });
-                  return avatarFS.writeFile(_user._id.toString(), cropPath, function(err, result) {
+                  avatarData = fs.readFileSync(cropPath, 'binary');
+                  resizeFunc = function(size, cb) {
+                    return im.resize({
+                      srcData: avatarData,
+                      width: size,
+                      format: 'jpg'
+                    }, function(err, stdout, stderr) {
+                      return avatarFS.write(_user._id.toString() + '_' + size, stdout, function(err, result) {
+                        return cb();
+                      });
+                    });
+                  };
+                  return async.forEach([128, 48, 32], resizeFunc, function(err) {
+                    console.log('complete');
                     return fs.unlink(cropPath, function(err) {
                       console.log('successfully deleted %s', cropPath);
                       return res.redirect('/user/' + _user.username);
@@ -406,7 +404,7 @@
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
-        var localData, page;
+        var localData, page, _currentUser;
         if (user) {
           page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
@@ -417,37 +415,76 @@
             userNav: 'track'
           };
           if (req.currentUser) {
-            localData.isSelf = req.currentUser.username === user.username;
-            user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
-            localData.user = req.currentUser;
-            localData.isLoggedIn = true;
-            localData.uri = req.url;
-            if (req.currentUser.username === user.username) {
-              localData.navLink = 'user';
-            }
-            console.log('skip', page - 1);
-            return db.post.find({
-              u_id: user._id
-            }, {
-              sort: {
-                date: -1
-              },
-              limit: 10,
-              skip: 10 * (page - 1)
-            }, function(err, cursor) {
-              return cursor.toArray(function(err, posts) {
-                return cursor.count(function(err, count) {
-                  var feeds;
-                  feeds = {};
-                  feeds.num_items = count;
-                  feeds.items = posts;
-                  feeds.items.forEach(function(post) {
-                    return post.user = user;
-                  });
-                  localData.posts = feeds;
-                  return res.render('user', localData);
+            _currentUser = req.currentUser;
+            localData.isSelf = _currentUser.username === user.username;
+            return async.parallel({
+              isFollowing: function(callback) {
+                return db.follow.findOne({
+                  from: _currentUser._id,
+                  to: user._id
+                }, function(err, follow) {
+                  return callback(null, follow != null);
                 });
-              });
+              },
+              posts: function(callback) {
+                return db.post.find({
+                  u_id: user._id
+                }, {
+                  sort: {
+                    date: -1
+                  },
+                  limit: 10,
+                  skip: 10 * (page - 1)
+                }, function(err, cursor) {
+                  return async.parallel({
+                    count: function(cb) {
+                      return cursor.count(function(err, count) {
+                        return cb(err, count);
+                      });
+                    },
+                    items: function(cb) {
+                      return cursor.toArray(function(err, posts) {
+                        return cb(err, posts);
+                      });
+                    }
+                  }, function(err, results) {
+                    var feeds;
+                    feeds = {};
+                    feeds.num_items = results.count;
+                    feeds.items = results.items;
+                    return async.forEach(feeds.items, function(item, cb) {
+                      return async.parallel({
+                        comments: function(cb2) {
+                          return db.comment.findItems({
+                            p_id: item._id
+                          }, function(err, comments) {
+                            return cb2(err, comments);
+                          });
+                        },
+                        user: function(cb2) {
+                          return cb2(err, user);
+                        }
+                      }, function(err, results) {
+                        item.comments = results.comments;
+                        item.user = results.user;
+                        return cb(err);
+                      });
+                    }, function(err) {
+                      return callback(err, feeds);
+                    });
+                  });
+                });
+              }
+            }, function(err, results) {
+              user.isFollowing = results.isFollowing;
+              localData.posts = results.posts;
+              localData.user = _currentUser;
+              localData.isLoggedIn = true;
+              localData.uri = req.url;
+              if (req.currentUser.username === user.username) {
+                localData.navLink = 'user';
+              }
+              return res.render('user', localData);
             });
           } else {
             return res.render('user', localData);
@@ -461,7 +498,7 @@
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
-        var count, followings, localData, page, start;
+        var localData, page, _currentUser;
         if (user) {
           page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
@@ -472,31 +509,45 @@
             userNav: 'following'
           };
           if (req.currentUser) {
-            localData.isSelf = req.currentUser.username === user.username;
-            user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
-            localData.user = req.currentUser;
-            localData.isLoggedIn = true;
-            localData.uri = req.url;
-            count = 0;
-            start = (page - 1) * 10;
-            console.log(start);
-            localData.users = [];
-            followings = user.following.slice(start, start + 10);
-            console.log(followings);
-            if (followings.length) {
-              return followings.forEach(function(following, index, list) {
-                return db.user.findById(following, function(err, user) {
-                  localData.users.push(user);
-                  count++;
-                  if (count === list.length) {
-                    console.log(localData.users);
-                    return res.render('follow', localData);
-                  }
+            _currentUser = req.currentUser;
+            return async.parallel({
+              isFollowing: function(callback) {
+                return db.follow.findOne({
+                  from: _currentUser._id,
+                  to: user._id
+                }, function(err, follow) {
+                  return callback(null, follow != null);
                 });
-              });
-            } else {
+              },
+              users: function(callback) {
+                var skip;
+                skip = (page - 1) * 10;
+                return db.follow.findItems({
+                  from: user._id
+                }, {
+                  skip: skip,
+                  limit: 10
+                }, function(err, followings) {
+                  return async.map(followings, function(item, cb) {
+                    return db.user.findOne({
+                      _id: item.to
+                    }, function(err, user) {
+                      return cb(err, user);
+                    });
+                  }, function(err, results) {
+                    return callback(null, results);
+                  });
+                });
+              }
+            }, function(err, results) {
+              localData.isSelf = _currentUser.username === user.username;
+              user.isFollowing = results.isFollowing;
+              localData.users = results.users;
+              localData.user = req.currentUser;
+              localData.isLoggedIn = true;
+              localData.uri = req.url;
               return res.render('follow', localData);
-            }
+            });
           } else {
             return res.render('follow', localData);
           }
@@ -509,42 +560,56 @@
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
-        var count, followers, localData, page, start;
+        var localData, page, _currentUser;
         if (user) {
           page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
-            title: user.nick + "的关注",
+            title: user.nick + "的粉丝",
             pageUser: user,
             isLoggedIn: false,
             page: page,
             userNav: 'follower'
           };
           if (req.currentUser) {
-            localData.isSelf = req.currentUser.username === user.username;
-            user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) !== -1;
-            localData.user = req.currentUser;
-            localData.isLoggedIn = true;
-            localData.uri = req.url;
-            count = 0;
-            start = (page - 1) * 10;
-            console.log(start);
-            localData.users = [];
-            followers = user.follower.slice(start, start + 10);
-            console.log(followers);
-            if (followers.length) {
-              return followers.forEach(function(follower, index, list) {
-                return db.user.findById(follower, function(err, user) {
-                  localData.users.push(user);
-                  count++;
-                  if (count === list.length) {
-                    console.log(localData.users);
-                    return res.render('follow', localData);
-                  }
+            _currentUser = req.currentUser;
+            return async.parallel({
+              isFollowing: function(callback) {
+                return db.follow.findOne({
+                  from: _currentUser._id,
+                  to: user._id
+                }, function(err, follow) {
+                  return callback(null, follow != null);
                 });
-              });
-            } else {
+              },
+              users: function(callback) {
+                var skip;
+                skip = (page - 1) * 10;
+                return db.follow.findItems({
+                  to: user._id
+                }, {
+                  skip: skip,
+                  limit: 10
+                }, function(err, followers) {
+                  return async.map(followers, function(item, cb) {
+                    return db.user.findOne({
+                      _id: item.from
+                    }, function(err, user) {
+                      return cb(err, user);
+                    });
+                  }, function(err, results) {
+                    return callback(null, results);
+                  });
+                });
+              }
+            }, function(err, results) {
+              localData.isSelf = _currentUser.username === user.username;
+              user.isFollowing = results.isFollowing;
+              localData.users = results.users;
+              localData.user = req.currentUser;
+              localData.isLoggedIn = true;
+              localData.uri = req.url;
               return res.render('follow', localData);
-            }
+            });
           } else {
             return res.render('follow', localData);
           }
@@ -559,44 +624,40 @@
         currentUser = req.currentUser;
         return db.user.findById(req.params.id, function(err, user) {
           if (user) {
-            console.log('follow user', user);
-            return db.user.update({
-              _id: currentUser._id,
-              following: {
-                $ne: user._id.toString()
-              }
-            }, {
-              $push: {
-                'following': user._id.toString()
-              },
-              $inc: {
-                num_following: 1
-              }
+            return db.follow.insert({
+              from: currentUser._id,
+              to: user._id
             }, {
               safe: true
-            }, function(err, count) {
-              console.log('following count', count);
-              return db.user.update({
-                _id: user._id,
-                follower: {
-                  $ne: currentUser._id.toString()
+            }, function(err, replies) {
+              if (err != null) {
+                if (err.code === 11000) {
+                  return res.send('success');
+                } else {
+                  return next(err);
                 }
-              }, {
-                $push: {
-                  'follower': currentUser._id.toString()
-                },
-                '$inc': {
-                  num_follower: 1
-                }
-              }, {
-                safe: true
-              }, function(err, count) {
-                console.log('follower count', count);
-                return res.send('success');
-              });
+              } else {
+                return db.user.update({
+                  _id: currentUser._id
+                }, {
+                  $inc: {
+                    num_following: 1
+                  }
+                }, function(err, count) {
+                  return db.user.update({
+                    _id: user._id
+                  }, {
+                    $inc: {
+                      num_follower: 1
+                    }
+                  }, function(err, count) {
+                    return res.send('success');
+                  });
+                });
+              }
             });
           } else {
-            return res.send('error');
+            return res.send('user not found');
           }
         });
       } else {
@@ -610,35 +671,26 @@
         return db.user.findById(req.params.id, function(err, user) {
           if (user) {
             console.log('unfollow user', user);
-            return db.user.update({
-              _id: currentUser._id,
-              following: user._id.toString()
-            }, {
-              $pull: {
-                'following': user._id.toString()
-              },
-              $inc: {
-                num_following: -1
-              }
-            }, {
-              safe: true
-            }, function(err, count) {
-              console.log('unfollowing count', count);
+            return db.follow.remove({
+              from: currentUser._id,
+              to: user._id
+            }, function(err, follow) {
               return db.user.update({
-                _id: user._id,
-                follower: currentUser._id.toString()
+                _id: currentUser._id
               }, {
-                $pull: {
-                  'follower': currentUser._id.toString()
-                },
-                '$inc': {
-                  num_follower: -1
+                $inc: {
+                  num_following: -1
                 }
-              }, {
-                safe: true
               }, function(err, count) {
-                console.log('follower count', count);
-                return res.send('success');
+                return db.user.update({
+                  _id: user._id
+                }, {
+                  $inc: {
+                    num_follower: -1
+                  }
+                }, function(err, count) {
+                  return res.send('success');
+                });
               });
             });
           } else {
@@ -659,11 +711,11 @@
         date: new Date(),
         u: {
           _id: _user._id,
-          username: _user.username
+          username: _user.username,
+          nick: _user.nick
         }
       };
       return db.comment.insert(comment, function(err, replies) {
-        console.log(replies[0]);
         return res.send(replies[0]);
       });
     });
@@ -676,7 +728,6 @@
           console.log('file', files);
           console.log('\nuploaded %s to %s', files.audio.filename, files.audio.path);
           format = files.audio.filename.substr(files.audio.filename.lastIndexOf('.') + 1);
-          console.log('format', format);
           formats = ['mp3', 'wav', 'ogg', 'mp4'];
           if (formats.indexOf(format) === -1) {
             return res.redirect('back');
@@ -730,18 +781,23 @@
       });
     });
     return app.get('/avatar/:id', function(req, res) {
-      var _filename;
-      _filename = req.params.id;
-      return avatarFS.exist(_filename, function(err, exist) {
-        if (exist) {
-          return avatarFS.stream(_filename, function(err, stream) {
-            res.contentType('image/jpeg');
-            return stream.pipe(res);
-          });
-        } else {
-          return res.sendfile('public/images/avatar-default-60.png');
-        }
-      });
+      var size, _filename;
+      size = req.query.size;
+      if (size === '32' || size === '48' || size === '128') {
+        _filename = req.params.id + '_' + size;
+        return avatarFS.exist(_filename, function(err, exist) {
+          if (exist) {
+            return avatarFS.stream(_filename, function(err, stream) {
+              res.contentType('image/jpeg');
+              return stream.pipe(res);
+            });
+          } else {
+            return res.sendfile('public/images/avatar-default-' + size + '.png');
+          }
+        });
+      } else {
+        return res.end('size should be 32, 48, 128');
+      }
     });
   };
   exports.route = route;

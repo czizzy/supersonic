@@ -22,10 +22,8 @@ getUser = (req, res, next) ->
     console.log 'basic', basicUser
     if basicUser
         db.user.findOne {username: basicUser.username}, (err, getedUser) ->
-            console.log 'geted', getedUser
             if getedUser?
                 getedUser = new User getedUser
-                console.log 'auth', getedUser
                 if getedUser.authenticate(basicUser.password)
                     delete getedUser.hashed_password
                     delete getedUser.salt
@@ -54,6 +52,7 @@ httpAuthUser = (req, res, next) ->
 
 start = (app) ->
     db = app.db
+    audioFS = app.audioFS
     app.get '/api/account/verify_credentials.json', httpAuthUser, (req, res) ->
         if req.currentUser?
             res.send req.currentUser
@@ -64,8 +63,6 @@ start = (app) ->
         if req.currentUser?
             _user = req.currentUser
             req.form.emit 'callback', (err, fields, files) ->
-                console.log 'post', fields
-                console.log 'file', files
                 console.log '\nuploaded %s to %s', files.audio.filename, files.audio.path
                 format = files.audio.filename.substr files.audio.filename.lastIndexOf('.') + 1
                 console.log 'format', format
@@ -83,7 +80,6 @@ start = (app) ->
                     date: new Date()
 
                 db.post.insert post, (err, replies) ->
-                    console.log 'insert err', err
                     console.log 'post success', replies
                     db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}
                     audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
@@ -93,7 +89,6 @@ start = (app) ->
         else
             req.form.emit 'callback', (err, fields, files) ->
                 fs.unlink files.audio.path, (err) ->
-                    console.log 'unlink', err
                     console.log 'successfully deleted %s', files.audio.path
             unAuthorized res
 

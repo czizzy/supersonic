@@ -108,8 +108,8 @@ $(function(){
 						var commentsStr = '';
 						_.each(showComments, function(item, index, list){
 							commentsStr += '<div>';
-							commentsStr += ('<p>'+item.body+'</p>');
-							commentsStr += ('<p>'+item.u.username+'</p>');
+							commentsStr += ('<p>'+Util.htmlspecialchars(item.body)+'</p>');
+							commentsStr += ('<p>'+Util.htmlspecialchars(item.u.nick)+'</p>');
 							commentsStr += ('<p>'+item.date+'</p>');
 							commentsStr += '</div>';
 						});
@@ -210,7 +210,7 @@ $(function(){
 				$.post('/comment', {id: $this.attr('data-id'), body: $dialog.find('textarea').val(), time: time}, function(res){
 					console.log(res);
 					model.get('comments').push(res);		
-					$bar.find('ul').append('<li data-id="'+res._id+'" style="left:' + (res.time/fullTime*100) + '%" data-body="'+res.body+'"><img src="/avatar/'+res.u._id+'" width="20" height="20" /></li>');
+					$bar.find('ul').append('<li data-id="'+res._id+'" style="left:' + (res.time/fullTime*100) + '%" data-body="'+Util.htmlspecialchars(res.body)+'"><img src="/avatar/'+res.u._id+'?size=32" width="20" height="20" /></li>');
 				});
 				$dialog.remove();
 			});

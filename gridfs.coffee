@@ -8,34 +8,35 @@ db.open (err, db) ->
     console.log "%s grid fs is open", root
 
 class GridFS
-    constructor:(root) ->
-        @root = root
+    constructor:(options) ->
+        @options = options
 
     writeFile: (filename, path, cb) ->
-        _root = @root
+        _options = @options
         #db.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-        gridStore = new GridStore db, filename, "w", {'root':_root}
+        gridStore = new GridStore db, filename, "w", _options
         gridStore.open (err, gridStore) ->
-            console.log 'open err', err
             gridStore.writeFile path, (err, result) ->
-                console.log 'result err', err
-                console.log result, 'result'
                 gridStore.close (err, result) ->
                     cb(err, result)
+    write: (filename, content, cb) ->
+        _options = @options
+        #db.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
+        gridStore = new GridStore db, filename, "w", _options
+        gridStore.open (err, gridStore) ->
+            gridStore.write content, (err, gridStore) ->
+                gridStore.close (err, result) ->
+                    cb(err)
 
     unlink: (filename, cb) ->
-        _root = @root
-        GridStore.unlink db, filename, { 'root': _root }, (err, content) ->
+        _options = @options
+        GridStore.unlink db, filename, _options, (err, content) ->
             cb(err)
 
     stream: (filename, cb) ->
-        _root = @root
-        console.log filename
-        gridStore = new GridStore db, filename, "r", { 'root':_root }
-        console.log gridStore
+        _options = @options
+        gridStore = new GridStore db, filename, "r", _options
         gridStore.open (err, gridStore) ->
-            console.log 'open', filename
-            console.log 'err', err
             fileStream = gridStore.stream(true)
             fileStream.on 'error', (error) ->
                 console.log 'error', error
@@ -44,9 +45,9 @@ class GridFS
             cb(err, fileStream)
 
     exist: (filename, cb) ->
-        _root = @root
+        _options = @options
         #db.authenticate configArgs.mongo.account, configArgs.mongo.password, (err, success) ->
-        GridStore.exist db, filename, _root, (err, exist) ->
+        GridStore.exist db, filename, _options.root, (err, exist) ->
             cb err, exist
 
 exports.GridFS = GridFS

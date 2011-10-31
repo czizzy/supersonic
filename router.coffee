@@ -1,16 +1,14 @@
 model = require './model.js'
-GridFS = require('./gridfs.js').GridFS
 LoginToken = model.LoginToken
 User = model.User
 im = require 'imagemagick'
-#step = require('./step.js')
 fs = require 'fs'
-
-avatarFS = new GridFS 'avatar'
-audioFS = new GridFS 'audio'
+async = require 'async'
 
 route = (app) ->
     db = app.db
+    avatarFS = app.avatarFS
+    audioFS = app.audioFS
 
     authenticateFromLoginToken = (req, res, next) ->
         cookie = JSON.parse(req.cookies.logintoken)
@@ -75,52 +73,48 @@ route = (app) ->
         feeds.hasMore = false
         count = 0
         hasFeedUsers = []
-        console.log currentUser
-        currentUser.following.push currentUser._id.toString()
-        console.log 'following', currentUser.following
-        currentUser.following.forEach (item,index,list) ->
-            db.user.findById item, (err, user) ->
+        async.waterfall [
+            (callback)->
+                db.follow.findItems {from:currentUser._id}, {limit:1000}, (err, followings) ->
+                    followings = followings.map (item)->
+                        item.to
+                    followings.push(currentUser._id)
+                    callback(null, followings)
+            , (followings, callback)->
                 if lastDt
-                    selector = {u_id: user._id, date:{'$lt':lastDt}}
+                    selector = {u_id: {$in:followings}, date:{'$lt':lastDt}}
                 else
-                    selector = {u_id: user._id}
-                db.post.findItems selector, {sort:{date:-1}, limit:10, skip:0}, (err, posts) ->
-                    console.log user.username, posts
-                    if(posts.length>0)
-                        hasFeedUsers.push user
-                    posts.forEach (post) ->
-                        post.user = user
-                        feeds.items.push(post)
-                    count++
-                    if(count is list.length)
-                        count = 0
-                        if feeds.items.length
-                            feeds.items.sort (a,b)->
-                                b.date.getTime() - a.date.getTime()
-                            feeds.hasMore = (feeds.items.length>10)
-                            if(feeds.hasMore)
-                                feeds.items = feeds.items[0...10]
-                            feeds.items.forEach (feed, index, list) ->
-                                db.comment.findItems {p_id:feed._id}, (err, comments) ->
-                                    feed.comments = comments
-                                    console.log feed.date
-                                    count++
-                                    if(count is list.length)
-                                        console.log 'finish', feeds
-                                        if(hasFeedUsers.length==1)
-                                            if lastDt
-                                                selector = {u_id: hasFeedUsers[0]._id, date:{'$lt':lastDt}}
-                                            else
-                                                selector = {u_id: hasFeedUsers[0]._id}
-                                            db.post.find selector, {sort:{date:-1}, limit:10, skip:0}, (err, cursor) ->
-                                                cursor.count (err, count) ->
-                                                    console.log 'more count', count
-                                                    feeds.hasMore = count>10
-                                                    fn feeds
-                                        else
-                                            console.log 'hasMore', feeds.hasMore
-                                            fn feeds
-                        else fn feeds
+                    selector = {u_id: {$in:followings}}
+                db.post.find selector, {sort:{date:-1}, limit:10}, (err, postsCursor)->
+                    async.parallel {
+                        count: (cb)->
+                            postsCursor.count (err, count)->
+                                cb(err, count)
+                        items: (cb)->
+                            postsCursor.toArray (err, posts)->
+                                cb(err, posts)
+                    }, (err, results)->
+                        feeds = {}
+                        feeds.hasMore = results.count>10
+                        posts = results.items
+                        async.forEach posts, (item, cb)->
+                            async.parallel {
+                                comments:(cb2)->
+                                    db.comment.findItems {p_id:item._id}, (err, comments) ->
+                                        cb2(err, comments)
+                                user:(cb2)->
+                                    db.user.findOne {_id:item.u_id}, (err, user)->
+                                        cb2(err, user)
+                            }, (err, results)->
+                                item.comments = results.comments
+                                item.user = results.user
+                                cb(err)
+                        , (err)->
+                            feeds.items = posts
+                            console.log 'feed', feeds
+                            fn feeds
+                            callback(null, 'done')
+        ]
 
     app.get '/feeds', loadUser, (req, res) ->
         if req.currentUser
@@ -131,7 +125,6 @@ route = (app) ->
 
     app.get '/', loadUser, (req, res) ->
         if req.currentUser
-            console.log req.currentUser
             getFeeds req.currentUser, null, (feeds) ->
                 res.render 'home', {title: 'home', posts: feeds, user: req.currentUser, navLink: 'home', ifSelf: 'false'}
         else
@@ -150,7 +143,6 @@ route = (app) ->
         _user.username = _user.username.trim()
         _user.email = _user.email.trim()
 
-        console.log _user
         if _user.password is '' or _user.confirm_password is '' or _user.username is '' or _user.email is ''
             req.flash 'error', '字段不能为空'
             return res.render 'signup', { title: 'signup'}
@@ -191,7 +183,6 @@ route = (app) ->
                     req.session.user_id = user._id
                     if req.body.remember_me
                         loginToken = new LoginToken({_id:user._id})
-                        console.log loginToken
                         db.loginToken.save loginToken, (err, count) ->
                             res.cookie('logintoken', loginToken.cookieValue(), { expires: new Date(Date.now() + 2 * 604800000), path: '/' })
                     res.redirect '/'
@@ -224,15 +215,11 @@ route = (app) ->
         if req.currentUser
             _user = req.currentUser
             req.form.emit 'callback', (err, fields, files) ->
-                console.log 'fie', fields
-                console.log 'fil', files
                 console.log '\nuploaded %s to %s', files.avatar.filename, files.avatar.path
-                console.log 'fields', fields
                 if(fields.nick)
                     db.user.updateById _user._id.toString(), {'$set': {nick: fields.nick}}
                 if(files.avatar.size>0)
                     im.identify files.avatar.path, (err, features)->
-                        console.log 'features',features
                         imageFormats = ['JPEG', 'PNG', 'GIF']
                         if(features? and imageFormats.indexOf(features.format) != -1)
                             size = if features.width <= features.height then features.width else features.height
@@ -240,7 +227,13 @@ route = (app) ->
                             im.crop {srcPath: files.avatar.path, dstPath: cropPath, width: size}, (err, stdout, stderr) ->
                                 fs.unlink files.avatar.path, (err) ->
                                     console.log 'successfully deleted %s', files.avatar.path
-                                avatarFS.writeFile _user._id.toString(), cropPath, (err, result) ->
+                                avatarData = fs.readFileSync(cropPath, 'binary')
+                                resizeFunc = (size, cb) ->
+                                    im.resize {srcData: avatarData, width: size, format: 'jpg'}, (err, stdout, stderr) ->
+                                        avatarFS.write _user._id.toString()+'_'+size, stdout, (err, result) ->
+                                            cb()
+                                async.forEach [128, 48, 32], resizeFunc, (err)->
+                                    console.log 'complete'
                                     fs.unlink cropPath, (err) ->
                                         console.log 'successfully deleted %s', cropPath
                                         res.redirect '/user/'+_user.username
@@ -262,24 +255,47 @@ route = (app) ->
                     page: page
                     userNav: 'track'
                 if(req.currentUser)
-                    localData.isSelf = (req.currentUser.username is user.username)
-                    user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
-                    localData.user = req.currentUser
-                    localData.isLoggedIn = true
-                    localData.uri = req.url
-                    if(req.currentUser.username == user.username)
-                        localData.navLink = 'user'
-                    console.log 'skip', (page-1)
-                    db.post.find {u_id: user._id}, {sort:{date: -1}, limit:10, skip:10*(page-1)}, (err, cursor) ->
-                        cursor.toArray (err,posts) ->
-                            cursor.count (err, count) ->
-                                feeds = {}
-                                feeds.num_items = count
-                                feeds.items = posts
-                                feeds.items.forEach (post) ->
-                                    post.user = user
-                                localData.posts = feeds
-                                res.render 'user', localData
+                    _currentUser = req.currentUser
+                    localData.isSelf = (_currentUser.username is user.username)
+                    async.parallel {
+                        isFollowing: (callback)->
+                            db.follow.findOne {from:_currentUser._id, to:user._id}, (err, follow) ->
+                                callback null, follow?
+                        posts: (callback)->
+                            db.post.find {u_id: user._id}, {sort:{date: -1}, limit:10, skip:10*(page-1)}, (err, cursor) ->
+                                async.parallel {
+                                    count:(cb)->
+                                        cursor.count (err,count) ->
+                                            cb(err, count)
+                                    items:(cb)->
+                                        cursor.toArray (err,posts) ->
+                                            cb(err, posts)
+                                }, (err, results)->
+                                    feeds = {}
+                                    feeds.num_items = results.count
+                                    feeds.items = results.items
+                                    async.forEach feeds.items, (item, cb)->
+                                        async.parallel {
+                                            comments:(cb2)->
+                                                db.comment.findItems {p_id:item._id}, (err, comments) ->
+                                                    cb2(err, comments)
+                                            user:(cb2)->
+                                                cb2(err, user)
+                                        }, (err, results)->
+                                            item.comments = results.comments
+                                            item.user = results.user
+                                            cb(err)
+                                    , (err)->
+                                        callback err, feeds
+                    }, (err, results) ->
+                        user.isFollowing = results.isFollowing
+                        localData.posts = results.posts
+                        localData.user = _currentUser
+                        localData.isLoggedIn = true
+                        localData.uri = req.url
+                        if(req.currentUser.username == user.username)
+                            localData.navLink = 'user'
+                        res.render 'user', localData
                 else res.render 'user', localData
             else
                 res.send err
@@ -295,27 +311,27 @@ route = (app) ->
                     page: page
                     userNav: 'following'
                 if(req.currentUser)
-                    localData.isSelf = (req.currentUser.username is user.username)
-                    user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
-                    localData.user = req.currentUser
-                    localData.isLoggedIn = true
-                    localData.uri = req.url
-                    count = 0
-                    start = (page-1)*10
-                    console.log start
-                    localData.users = []
-                    followings = user.following[start...(start+10)]
-                    #followings = user.following
-                    console.log followings
-                    if followings.length
-                        followings.forEach (following, index, list) ->
-                            db.user.findById following, (err, user) ->
-                                localData.users.push user
-                                count++
-                                if count is list.length
-                                    console.log localData.users
-                                    res.render 'follow', localData
-                    else
+                    _currentUser = req.currentUser
+
+                    async.parallel {
+                        isFollowing: (callback)->
+                            db.follow.findOne {from:_currentUser._id, to:user._id}, (err, follow) ->
+                                callback null, follow?
+                        users: (callback)->
+                            skip = (page-1)*10
+                            db.follow.findItems {from:user._id}, {skip:skip, limit:10}, (err, followings) ->
+                                async.map followings, (item, cb)->
+                                    db.user.findOne {_id: item.to}, (err, user) ->
+                                        cb(err, user)
+                                , (err, results)->
+                                    callback null, results
+                    }, (err, results) ->
+                        localData.isSelf = _currentUser.username is user.username
+                        user.isFollowing = results.isFollowing
+                        localData.users = results.users
+                        localData.user = req.currentUser
+                        localData.isLoggedIn = true
+                        localData.uri = req.url
                         res.render 'follow', localData
                 else res.render 'follow', localData
             else
@@ -326,33 +342,32 @@ route = (app) ->
             if(user)
                 page = if (req.query.page? and !isNaN(req.query.page)) then req.query.page else 1
                 localData =
-                    title: user.nick+"的关注"
+                    title: user.nick+"的粉丝"
                     pageUser: user
                     isLoggedIn: false
                     page: page
                     userNav: 'follower'
                 if(req.currentUser)
-                    localData.isSelf = (req.currentUser.username is user.username)
-                    user.isFollowing = req.currentUser.following.indexOf(user._id.toString()) isnt -1
-                    localData.user = req.currentUser
-                    localData.isLoggedIn = true
-                    localData.uri = req.url
-                    count = 0
-                    start = (page-1)*10
-                    console.log start
-                    localData.users = []
-                    followers = user.follower[start...(start+10)]
-                    #followings = user.following
-                    console.log followers
-                    if followers.length
-                        followers.forEach (follower, index, list) ->
-                            db.user.findById follower, (err, user) ->
-                                localData.users.push user
-                                count++
-                                if count is list.length
-                                    console.log localData.users
-                                    res.render 'follow', localData
-                    else
+                    _currentUser = req.currentUser
+                    async.parallel {
+                        isFollowing: (callback)->
+                            db.follow.findOne {from:_currentUser._id, to:user._id}, (err, follow) ->
+                                callback null, follow?
+                        users: (callback)->
+                            skip = (page-1)*10
+                            db.follow.findItems {to:user._id}, {skip:skip, limit:10}, (err, followers) ->
+                                async.map followers, (item, cb)->
+                                    db.user.findOne {_id: item.from}, (err, user) ->
+                                        cb(err, user)
+                                , (err, results)->
+                                    callback null, results
+                    }, (err, results) ->
+                        localData.isSelf = _currentUser.username is user.username
+                        user.isFollowing = results.isFollowing
+                        localData.users = results.users
+                        localData.user = req.currentUser
+                        localData.isLoggedIn = true
+                        localData.uri = req.url
                         res.render 'follow', localData
                 else res.render 'follow', localData
             else
@@ -364,13 +379,16 @@ route = (app) ->
             currentUser = req.currentUser
             db.user.findById req.params.id, (err, user) ->
                 if (user)
-                    console.log 'follow user', user
-                    db.user.update {_id:currentUser._id, following:{$ne: user._id.toString()}}, {$push: {'following': user._id.toString()}, $inc: {num_following: 1}}, {safe: true}, (err, count)->
-                        console.log 'following count', count
-                        db.user.update {_id:user._id, follower:{$ne: currentUser._id.toString()}}, {$push: {'follower': currentUser._id.toString()}, '$inc': {num_follower: 1}}, {safe: true}, (err, count)->
-                            console.log 'follower count', count
-                            res.send 'success'
-                else res.send 'error'
+                    db.follow.insert {from:currentUser._id, to:user._id}, {safe:true}, (err, replies) ->
+                        if err?
+                            if err.code is 11000
+                                res.send 'success'
+                            else next(err)
+                        else
+                            db.user.update {_id:currentUser._id}, {$inc: {num_following: 1}}, (err, count)->
+                                db.user.update {_id:user._id}, {$inc: {num_follower: 1}}, (err, count)->
+                                    res.send 'success'
+                else res.send 'user not found'
         else
             res.send 'error'
 
@@ -380,11 +398,10 @@ route = (app) ->
             db.user.findById req.params.id, (err, user) ->
                 if (user)
                     console.log 'unfollow user', user
-                    db.user.update {_id:currentUser._id, following: user._id.toString()}, {$pull: {'following': user._id.toString()}, $inc: {num_following: -1}}, {safe: true}, (err, count)->
-                        console.log 'unfollowing count', count
-                        db.user.update {_id:user._id, follower: currentUser._id.toString()}, {$pull: {'follower': currentUser._id.toString()}, '$inc': {num_follower: -1}}, {safe: true}, (err, count)->
-                            console.log 'follower count', count
-                            res.send 'success'
+                    db.follow.remove {from:currentUser._id, to:user._id}, (err, follow) ->
+                        db.user.update {_id:currentUser._id}, {$inc: {num_following: -1}}, (err, count)->
+                            db.user.update {_id:user._id}, {$inc: {num_follower: -1}}, (err, count)->
+                                res.send 'success'
                 else res.send 'error'
         else
             res.send 'error'
@@ -399,8 +416,8 @@ route = (app) ->
             u:
                 _id: _user._id
                 username: _user.username
+                nick: _user.nick
         db.comment.insert comment, (err, replies) ->
-            console.log replies[0]
             res.send replies[0]
 
     app.post '/post', loadUser, (req, res) ->
@@ -410,7 +427,6 @@ route = (app) ->
                 console.log 'file', files
                 console.log '\nuploaded %s to %s', files.audio.filename, files.audio.path
                 format = files.audio.filename.substr files.audio.filename.lastIndexOf('.') + 1
-                console.log 'format', format
                 formats = ['mp3', 'wav', 'ogg', 'mp4']
                 return res.redirect 'back' if formats.indexOf(format) is -1
                 post =
@@ -445,12 +461,15 @@ route = (app) ->
             stream.pipe(res)
 
     app.get '/avatar/:id', (req, res) ->
-        _filename = req.params.id
-        avatarFS.exist _filename, (err, exist) ->
-            if exist
-                avatarFS.stream _filename, (err, stream) ->
-                    res.contentType 'image/jpeg'
-                    stream.pipe(res)
-            else res.sendfile('public/images/avatar-default-60.png')
+        size=req.query.size
+        if size is '32' or size is '48' or size is '128'
+            _filename = req.params.id + '_' + size
+            avatarFS.exist _filename, (err, exist) ->
+                if exist
+                    avatarFS.stream _filename, (err, stream) ->
+                        res.contentType 'image/jpeg'
+                        stream.pipe(res)
+                else res.sendfile('public/images/avatar-default-'+size+'.png')
+        else res.end 'size should be 32, 48, 128'
 
 exports.route = route
