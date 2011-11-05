@@ -14,6 +14,7 @@ api = require './api.js'
 GridFS = require('./gridfs.js').GridFS
 app.avatarFS = new GridFS { root:'avatar',"content_type": "image/jpeg", "chunk_size": 1024*64 }
 app.audioFS = new GridFS { root:'audio',"content_type": "audio/mp3" }
+app.wfFS = new GridFS { root:'waveform',"content_type": "image/png" }
 
 app.helpers require('./helpers.js').helpers
 app.dynamicHelpers require('./helpers.js').dynamicHelpers;
@@ -40,10 +41,6 @@ app.configure () ->
     app.use(express.static(__dirname + '/public'))
     # error handling
 
-app.configure 'development', () ->
-    app.use(express.errorHandler({ dumpExceptions: true, showStack: true }))
-
-app.configure 'production', () ->
     app.use (err, req, res, next) ->
         console.log 'handle err', err
         res.render '500.jade'
@@ -55,19 +52,20 @@ db.bind 'loginToken'
 db.bind 'post'
 db.bind 'comment'
 db.bind 'follow'
+db.bind 'fav'
 
 db.user.ensureIndex {'username':1}, true, (err)->
     console.log 'user index username', err
 db.comment.ensureIndex {'p_id':1}, false, (err)->
     console.log 'comment index p_id', err
-# db.post.dropIndex {'u_id':1}, false, (err)->
-#     console.log 'drop err', err
 db.post.ensureIndex {date:-1, u_id:1}, false, (err)->
     console.log 'post index', err
 db.follow.ensureIndex {from:1, to:1}, true, (err)->
     console.log 'follow index from'
 db.follow.ensureIndex {to:1}, false, (err)->
     console.log 'follow index to'
+db.fav.ensureIndex {u:1, p:1}, true, (err)->
+    console.log 'fav index'
 
 # Routes
 router.route app

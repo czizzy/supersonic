@@ -5,13 +5,17 @@ script#post-item-template(type="text/html")
 			<% print('<p class="track-title">' + Util.htmlspecialchars(user.nick) + ' - ' + Util.htmlspecialchars(text) + '</p>'); %>
 			p.track-time
 				!=partial('partials/time')
+				<% if(isFav) print('<span class="unfav" title="取消收藏">'+ numFav +'</span>'); else print('<span class="fav" title="收藏">'+ numFav +'</span>'); %>
+					
 				- if (typeof(isSelf) != 'undefined' && isSelf)
 					<% print('<a class="post-delete" href="javascript:void(0);">删除</a>'); %>
 
-	div.clearfix.audio
-		span.play
+	div.clearfix.track
+		div.track-actions
+			span.play
 		.audio-full
-			p.progress audio
+			.audio
+				<% print('<img width="800" height="60" class="waveform" src="/waveform/', id, '" />'); %>
+				div.progress &nbsp;
 			div.comment-bar &nbsp;
 				ul
-					<% _.each(comments, function(comment, index, list){	print('<li data-id="'+comment._id+'" data-body="'+Util.htmlspecialchars(comment.body)+'" style="left:'+(comment.time/time*100)+'%"><img src="/avatar/'+comment.u._id+'?size=32" height="18" width="18"/></li>') }); %>

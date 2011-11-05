@@ -7,10 +7,11 @@
   fs = require('fs');
   async = require('async');
   route = function(app) {
-    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getUser, loadUser;
+    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getUser, loadUser, wfFS;
     db = app.db;
     avatarFS = app.avatarFS;
     audioFS = app.audioFS;
+    wfFS = app.wfFS;
     authenticateFromLoginToken = function(req, res, next) {
       var cookie;
       cookie = JSON.parse(req.cookies.logintoken);
@@ -150,7 +151,16 @@
                     return db.comment.findItems({
                       p_id: item._id
                     }, function(err, comments) {
-                      return cb2(err, comments);
+                      return async.forEach(comments, function(comment, cb3) {
+                        return db.user.findOne({
+                          _id: comment.u._id
+                        }, function(err, user) {
+                          comment.u = user;
+                          return cb3(err);
+                        });
+                      }, function(err) {
+                        return cb2(err, comments);
+                      });
                     });
                   },
                   user: function(cb2) {
@@ -159,10 +169,19 @@
                     }, function(err, user) {
                       return cb2(err, user);
                     });
+                  },
+                  isFav: function(cb2) {
+                    return db.fav.findOne({
+                      u: currentUser._id,
+                      p: item._id
+                    }, function(err, fav) {
+                      return cb2(err, fav);
+                    });
                   }
                 }, function(err, results) {
                   item.comments = results.comments;
                   item.user = results.user;
+                  item.isFav = results.isFav != null;
                   return cb(err);
                 });
               }, function(err) {
@@ -308,12 +327,14 @@
     });
     app.get('/logout', loadUser, function(req, res) {
       if (req.session != null) {
-        db.loginToken.removeById(req.session.user_id.toString(), function() {
+        return db.loginToken.removeById(req.session.user_id.toString(), function() {
           res.clearCookie('logintoken');
-          return req.session.destroy();
+          req.session.destroy();
+          return res.redirect('/');
         });
+      } else {
+        return res.redirect('/');
       }
-      return res.redirect('/');
     });
     app.get('/post/new', loadUser, function(req, res) {
       if (req.currentUser) {
@@ -477,15 +498,33 @@
                           return db.comment.findItems({
                             p_id: item._id
                           }, function(err, comments) {
-                            return cb2(err, comments);
+                            return async.forEach(comments, function(comment, cb3) {
+                              return db.user.findOne({
+                                _id: comment.u._id
+                              }, function(err, user) {
+                                comment.u = user;
+                                return cb3(err);
+                              });
+                            }, function(err) {
+                              return cb2(err, comments);
+                            });
                           });
                         },
                         user: function(cb2) {
                           return cb2(err, user);
+                        },
+                        isFav: function(cb2) {
+                          return db.fav.findOne({
+                            u: _currentUser._id,
+                            p: item._id
+                          }, function(err, fav) {
+                            return cb2(err, fav);
+                          });
                         }
                       }, function(err, results) {
                         item.comments = results.comments;
                         item.user = results.user;
+                        item.isFav = results.isFav != null;
                         return cb(err);
                       });
                     }, function(err) {
@@ -758,53 +797,13 @@
         time: req.body.time,
         date: new Date(),
         u: {
-          _id: _user._id,
-          username: _user.username,
-          nick: _user.nick
+          _id: _user._id
         }
       };
       return db.comment.insert(comment, function(err, replies) {
+        replies[0].u = _user;
         return res.send(replies[0]);
       });
-    });
-    app.post('/post', loadUser, function(req, res) {
-      var _user;
-      if (req.currentUser) {
-        _user = req.currentUser;
-        return req.form.emit('callback', function(err, fields, files) {
-          var format, formats, post;
-          console.log('file', files);
-          console.log('\nuploaded %s to %s', files.audio.filename, files.audio.path);
-          format = files.audio.filename.substr(files.audio.filename.lastIndexOf('.') + 1);
-          formats = ['mp3', 'wav', 'ogg', 'mp4'];
-          if (formats.indexOf(format) === -1) {
-            return res.redirect('back');
-          }
-          post = {
-            text: fields.text,
-            u_id: _user._id,
-            format: format,
-            time: 52846,
-            date: new Date()
-          };
-          return db.post.insert(post, function(err, replies) {
-            console.log('saved post', replies);
-            db.user.updateById(post.u_id.toString(), {
-              '$inc': {
-                num_posts: 1
-              }
-            });
-            return audioFS.writeFile(replies[0]._id.toString(), files.audio.path, function(err, result) {
-              fs.unlink(files.audio.path, function(err) {
-                return console.log('successfully deleted %s', files.audio.path);
-              });
-              return res.redirect('/');
-            });
-          });
-        });
-      } else {
-        return res.redirect('/');
-      }
     });
     app.del('/post/:id.:format?', loadUser, function(req, res) {
       return db.post.removeById(req.params.id, function(err, p) {
@@ -822,9 +821,93 @@
         return res.send('1');
       });
     });
+    app.post('/post/fav/:id', loadUser, function(req, res) {
+      return db.fav.insert({
+        p: db.post.id(req.params.id),
+        u: req.currentUser._id
+      }, {
+        safe: true
+      }, function(err, f) {
+        if (err) {
+          if (err.code === 11000) {
+            return res.send('1');
+          } else {
+            return next(err);
+          }
+        } else {
+          return async.parallel([
+            function(cb) {
+              return db.post.updateById(req.params.id, {
+                '$inc': {
+                  num_fav: 1
+                }
+              }, function(err) {
+                return cb(err);
+              });
+            }, function(cb) {
+              return db.user.update({
+                _id: req.currentUser._id
+              }, {
+                '$inc': {
+                  num_fav: 1
+                }
+              }, function(err) {
+                return cb(err);
+              });
+            }
+          ], function(err, result) {
+            return res.send('1');
+          });
+        }
+      });
+    });
+    app.del('/post/fav/:id', loadUser, function(req, res) {
+      var selector;
+      selector = {
+        p: db.post.id(req.params.id),
+        u: req.currentUser._id
+      };
+      return db.fav.findOne(selector, function(err, f) {
+        if (f) {
+          return db.fav.remove(selector, function(err, result) {
+            return async.parallel([
+              function(cb) {
+                return db.post.updateById(req.params.id, {
+                  '$inc': {
+                    num_fav: -1
+                  }
+                }, function(err) {
+                  return cb(err);
+                });
+              }, function(cb) {
+                return db.user.update({
+                  _id: req.currentUser._id
+                }, {
+                  '$inc': {
+                    num_fav: -1
+                  }
+                }, function(err) {
+                  return cb(err);
+                });
+              }
+            ], function(err, result) {
+              return res.send('1');
+            });
+          });
+        } else {
+          return res.send('1');
+        }
+      });
+    });
     app.get('/audio/:id.:format', function(req, res) {
       return audioFS.stream(req.params.id, function(err, stream) {
         res.contentType('audio/' + req.params.format);
+        return stream.pipe(res);
+      });
+    });
+    app.get('/waveform/:id', function(req, res) {
+      return wfFS.stream(req.params.id, function(err, stream) {
+        res.contentType('audio/png');
         return stream.pipe(res);
       });
     });

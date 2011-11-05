@@ -1,4 +1,5 @@
 model = require './model.js'
+async = require 'async'
 fs = require 'fs'
 User = model.User
 db = null
@@ -53,6 +54,7 @@ httpAuthUser = (req, res, next) ->
 start = (app) ->
     db = app.db
     audioFS = app.audioFS
+    wfFS = app.wfFS
     app.get '/api/account/verify_credentials.json', httpAuthUser, (req, res) ->
         if req.currentUser?
             res.send req.currentUser
@@ -77,14 +79,26 @@ start = (app) ->
                     u_id: _user._id
                     format: format,
                     time: parseInt(fields.time),
-                    date: new Date()
+                    date: new Date(),
+                    num_favs: 0
 
                 db.post.insert post, (err, replies) ->
                     console.log 'post success', replies
-                    db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}
-                    audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
-                        fs.unlink files.audio.path, (err) ->
-                            console.log 'successfully deleted %s', files.audio.path
+                    async.parallel
+                        user: (cb)->
+                            db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}, (err, result)->
+                                cb err, result
+                        audio: (cb)->
+                            audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
+                                fs.unlink files.audio.path, (err) ->
+                                    console.log 'successfully deleted %s', files.audio.path
+                                cb err, result
+                        waveform: (cb)->
+                            wfFS.writeFile replies[0]._id.toString(), files.waveform.path, (err, result) ->
+                                fs.unlink files.waveform.path, (err) ->
+                                    console.log 'successfully deleted %s', files.waveform.path
+                                cb err, result
+                    , (err, results)->
                         res.send replies
         else
             req.form.emit 'callback', (err, fields, files) ->

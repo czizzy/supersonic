@@ -9,6 +9,7 @@ route = (app) ->
     db = app.db
     avatarFS = app.avatarFS
     audioFS = app.audioFS
+    wfFS = app.wfFS
 
     authenticateFromLoginToken = (req, res, next) ->
         cookie = JSON.parse(req.cookies.logintoken)
@@ -98,16 +99,25 @@ route = (app) ->
                         feeds.hasMore = results.count>10
                         posts = results.items
                         async.forEach posts, (item, cb)->
-                            async.parallel {
+                            async.parallel
                                 comments:(cb2)->
                                     db.comment.findItems {p_id:item._id}, (err, comments) ->
-                                        cb2(err, comments)
+                                        async.forEach comments, (comment, cb3)->
+                                            db.user.findOne {_id: comment.u._id}, (err, user)->
+                                                comment.u = user
+                                                cb3(err)
+                                        , (err) ->
+                                            cb2(err, comments)
                                 user:(cb2)->
                                     db.user.findOne {_id:item.u_id}, (err, user)->
                                         cb2(err, user)
-                            }, (err, results)->
+                                isFav:(cb2)->
+                                    db.fav.findOne {u:currentUser._id, p:item._id}, (err, fav)->
+                                        cb2(err, fav)
+                            , (err, results)->
                                 item.comments = results.comments
                                 item.user = results.user
+                                item.isFav = results.isFav?
                                 cb(err)
                         , (err)->
                             feeds.items = posts
@@ -198,7 +208,9 @@ route = (app) ->
             db.loginToken.removeById req.session.user_id.toString(), ->
                 res.clearCookie('logintoken')
                 req.session.destroy()
-        res.redirect '/'
+                res.redirect '/'
+        else
+            res.redirect '/'
 
     app.get '/post/new', loadUser, (req, res) ->
         if req.currentUser
@@ -281,15 +293,24 @@ route = (app) ->
                                     feeds.num_items = results.count
                                     feeds.items = results.items
                                     async.forEach feeds.items, (item, cb)->
-                                        async.parallel {
+                                        async.parallel
                                             comments:(cb2)->
                                                 db.comment.findItems {p_id:item._id}, (err, comments) ->
-                                                    cb2(err, comments)
+                                                    async.forEach comments, (comment, cb3)->
+                                                        db.user.findOne {_id: comment.u._id}, (err, user)->
+                                                            comment.u = user
+                                                            cb3(err)
+                                                    , (err) ->
+                                                        cb2(err, comments)
                                             user:(cb2)->
                                                 cb2(err, user)
-                                        }, (err, results)->
+                                            isFav:(cb2)->
+                                                db.fav.findOne {u:_currentUser._id, p:item._id}, (err, fav)->
+                                                    cb2(err, fav)
+                                        , (err, results)->
                                             item.comments = results.comments
                                             item.user = results.user
+                                            item.isFav = results.isFav?
                                             cb(err)
                                     , (err)->
                                         callback err, feeds
@@ -443,37 +464,9 @@ route = (app) ->
             date: new Date()
             u:
                 _id: _user._id
-                username: _user.username
-                nick: _user.nick
         db.comment.insert comment, (err, replies) ->
+            replies[0].u = _user
             res.send replies[0]
-
-    app.post '/post', loadUser, (req, res) ->
-        if req.currentUser
-            _user = req.currentUser
-            req.form.emit 'callback', (err, fields, files) ->
-                console.log 'file', files
-                console.log '\nuploaded %s to %s', files.audio.filename, files.audio.path
-                format = files.audio.filename.substr files.audio.filename.lastIndexOf('.') + 1
-                formats = ['mp3', 'wav', 'ogg', 'mp4']
-                return res.redirect 'back' if formats.indexOf(format) is -1
-                post =
-                    text: fields.text
-                    u_id: _user._id
-                    format: format,
-                    time: 52846, #TODO
-                    date: new Date()
-
-                db.post.insert post, (err, replies) ->
-                    console.log 'saved post', replies
-                    #db.feed.insert {_id:replies[0]._id, u_id:_user._id}
-                    db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}
-                    audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
-                        fs.unlink files.audio.path, (err) ->
-                            console.log 'successfully deleted %s', files.audio.path
-                        res.redirect '/'
-
-        else res.redirect '/'
 
     app.del '/post/:id.:format?', loadUser, (req, res) ->
         db.post.removeById req.params.id, (err, p) ->
@@ -483,9 +476,50 @@ route = (app) ->
             audioFS.unlink req.params.id, (err) ->
             res.send('1')
 
+    app.post '/post/fav/:id', loadUser, (req, res) ->
+        db.fav.insert {p: db.post.id(req.params.id), u: req.currentUser._id}, {safe: true}, (err, f) ->
+            if err
+                if err.code is 11000
+                   res.send '1'
+                else
+                    next err
+            else
+                async.parallel [
+                    (cb)->
+                        db.post.updateById req.params.id, {'$inc': {num_fav: 1}}, (err)->
+                            cb(err)
+                    , (cb)->
+                        db.user.update {_id:req.currentUser._id}, {'$inc': {num_fav: 1}}, (err)->
+                            cb(err)
+                ], (err, result)->
+                    res.send('1')
+
+    app.del '/post/fav/:id', loadUser, (req, res) ->
+        selector = {p: db.post.id(req.params.id), u: req.currentUser._id}
+        db.fav.findOne selector, (err, f) ->
+            if f
+                db.fav.remove selector, (err, result)->
+                    async.parallel [
+                        (cb)->
+                            db.post.updateById req.params.id, {'$inc': {num_fav: -1}}, (err)->
+                                cb(err)
+                        , (cb)->
+                            db.user.update {_id:req.currentUser._id}, {'$inc': {num_fav: -1}}, (err)->
+                                cb(err)
+                    ], (err, result)->
+                        res.send('1')
+            else
+               res.send '1'
+
+
     app.get '/audio/:id.:format', (req, res) ->
         audioFS.stream req.params.id, (err, stream) ->
             res.contentType 'audio/'+req.params.format
+            stream.pipe(res)
+
+    app.get '/waveform/:id', (req, res) ->
+        wfFS.stream req.params.id, (err, stream) ->
+            res.contentType 'audio/png'
             stream.pipe(res)
 
     app.get '/avatar/:id/:ver', (req, res) ->

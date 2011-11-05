@@ -20,6 +20,10 @@
     root: 'audio',
     "content_type": "audio/mp3"
   });
+  app.wfFS = new GridFS({
+    root: 'waveform',
+    "content_type": "image/png"
+  });
   app.helpers(require('./helpers.js').helpers);
   app.dynamicHelpers(require('./helpers.js').dynamicHelpers);
   app.settings.env = configArgs.env;
@@ -51,15 +55,7 @@
     }));
     app.use(express.methodOverride());
     app.use(app.router);
-    return app.use(express.static(__dirname + '/public'));
-  });
-  app.configure('development', function() {
-    return app.use(express.errorHandler({
-      dumpExceptions: true,
-      showStack: true
-    }));
-  });
-  app.configure('production', function() {
+    app.use(express.static(__dirname + '/public'));
     return app.use(function(err, req, res, next) {
       console.log('handle err', err);
       return res.render('500.jade', {
@@ -76,6 +72,7 @@
   db.bind('post');
   db.bind('comment');
   db.bind('follow');
+  db.bind('fav');
   db.user.ensureIndex({
     'username': 1
   }, true, function(err) {
@@ -102,6 +99,12 @@
     to: 1
   }, false, function(err) {
     return console.log('follow index to');
+  });
+  db.fav.ensureIndex({
+    u: 1,
+    p: 1
+  }, true, function(err) {
+    return console.log('fav index');
   });
   router.route(app);
   api.start(app);

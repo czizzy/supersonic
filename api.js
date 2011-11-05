@@ -1,6 +1,7 @@
 (function() {
-  var User, db, fs, getBasicUser, getUser, httpAuthUser, model, start, unAuthorized;
+  var User, async, db, fs, getBasicUser, getUser, httpAuthUser, model, start, unAuthorized;
   model = require('./model.js');
+  async = require('async');
   fs = require('fs');
   User = model.User;
   db = null;
@@ -70,9 +71,10 @@
     }
   };
   start = function(app) {
-    var audioFS;
+    var audioFS, wfFS;
     db = app.db;
     audioFS = app.audioFS;
+    wfFS = app.wfFS;
     app.get('/api/account/verify_credentials.json', httpAuthUser, function(req, res) {
       if (req.currentUser != null) {
         return res.send(req.currentUser);
@@ -104,19 +106,38 @@
             u_id: _user._id,
             format: format,
             time: parseInt(fields.time),
-            date: new Date()
+            date: new Date(),
+            num_favs: 0
           };
           return db.post.insert(post, function(err, replies) {
             console.log('post success', replies);
-            db.user.updateById(post.u_id.toString(), {
-              '$inc': {
-                num_posts: 1
+            return async.parallel({
+              user: function(cb) {
+                return db.user.updateById(post.u_id.toString(), {
+                  '$inc': {
+                    num_posts: 1
+                  }
+                }, function(err, result) {
+                  return cb(err, result);
+                });
+              },
+              audio: function(cb) {
+                return audioFS.writeFile(replies[0]._id.toString(), files.audio.path, function(err, result) {
+                  fs.unlink(files.audio.path, function(err) {
+                    return console.log('successfully deleted %s', files.audio.path);
+                  });
+                  return cb(err, result);
+                });
+              },
+              waveform: function(cb) {
+                return wfFS.writeFile(replies[0]._id.toString(), files.waveform.path, function(err, result) {
+                  fs.unlink(files.waveform.path, function(err) {
+                    return console.log('successfully deleted %s', files.waveform.path);
+                  });
+                  return cb(err, result);
+                });
               }
-            });
-            return audioFS.writeFile(replies[0]._id.toString(), files.audio.path, function(err, result) {
-              fs.unlink(files.audio.path, function(err) {
-                return console.log('successfully deleted %s', files.audio.path);
-              });
+            }, function(err, results) {
               return res.send(replies);
             });
           });

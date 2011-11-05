@@ -2,7 +2,11 @@
 html
   head
     title= title
+    link(rel='stylesheet', href='/stylesheets/app.css')
+    link(rel='stylesheet', href='/stylesheets/foundation.css')
+    link(rel='stylesheet', href='/stylesheets/ie.css')
     link(rel='stylesheet', href='/stylesheets/style.css')
+    link(rel='stylesheet', href='/stylesheets/jquery.bubblepopup.v2.3.1.css')
   body
     !=partial('_head')
     !{flashMessages}
