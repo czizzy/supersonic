@@ -13,9 +13,11 @@ script#post-item-template(type="text/html")
 	div.clearfix.track
 		div.track-actions
 			span.play
+			span.length <% print(time); %>
 		.audio-full
 			.audio
 				<% print('<img width="800" height="60" class="waveform" src="/waveform/', id, '" />'); %>
 				div.progress &nbsp;
+				div.bar
 			div.comment-bar &nbsp;
 				ul

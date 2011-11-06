@@ -16,20 +16,23 @@ mixin page(num_items, uri, currentPage)
 			- var start = currentPage-3;
 	- else var start = 1;
 
-	ul.paginator
+	ul.pagination
 		- if (currentPage == 1)
-			li.current <<
+			li.current 
+				mixin pageItem(1, uri, '<<')
 		- else
 			li
 				mixin pageItem(1, uri, '<<')
 		- for(var i = start; i<=pageCount && i-start < 7 ; i++)
 			- if (currentPage == i)
-				li.current=i
+				li.current
+					mixin pageItem(i, uri)
 			- else
 				li
 					mixin pageItem(i, uri)
 		- if (currentPage == pageCount)
-			li.current >>
+			li.current
+				mixin pageItem(pageCount, uri, '>>')
 		- else
 			li
 				mixin pageItem(pageCount, uri, '>>')

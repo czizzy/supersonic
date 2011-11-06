@@ -53,12 +53,6 @@
       return gridStore.open(function(err, gridStore) {
         var fileStream;
         fileStream = gridStore.stream(true);
-        fileStream.on('error', function(error) {
-          return console.log('error', error);
-        });
-        fileStream.on('end', function(end) {
-          return console.log('end');
-        });
         return cb(err, fileStream);
       });
     };

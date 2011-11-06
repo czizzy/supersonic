@@ -40,7 +40,6 @@ app.configure () ->
     app.use(app.router)
     app.use(express.static(__dirname + '/public'))
     # error handling
-
     app.use (err, req, res, next) ->
         console.log 'handle err', err
         res.render '500.jade'
@@ -56,14 +55,16 @@ db.bind 'fav'
 
 db.user.ensureIndex {'username':1}, true, (err)->
     console.log 'user index username', err
-db.comment.ensureIndex {'p_id':1}, false, (err)->
-    console.log 'comment index p_id', err
+db.comment.ensureIndex {'p':1}, false, (err)->
+    console.log 'comment index p', err
 db.post.ensureIndex {date:-1, u_id:1}, false, (err)->
     console.log 'post index', err
 db.follow.ensureIndex {from:1, to:1}, true, (err)->
     console.log 'follow index from'
 db.follow.ensureIndex {to:1}, false, (err)->
     console.log 'follow index to'
+db.fav.ensureIndex {p:1}, false, (err)->
+    console.log 'fav index'
 db.fav.ensureIndex {u:1, p:1}, true, (err)->
     console.log 'fav index'
 

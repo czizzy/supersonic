@@ -7,7 +7,7 @@
   fs = require('fs');
   async = require('async');
   route = function(app) {
-    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getUser, loadUser, wfFS;
+    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getPost, getUser, loadUser, wfFS;
     db = app.db;
     avatarFS = app.avatarFS;
     audioFS = app.audioFS;
@@ -77,13 +77,57 @@
         });
         return req.form.on('progress', function(bytesReceived, bytesExpected) {
           var percent;
-          console.log('on progress');
           percent = (bytesReceived / bytesExpected * 100) | 0;
           return process.stdout.write('Uploading: %' + percent + '\r');
         });
       } else {
         return getUser(req, res, next);
       }
+    };
+    getPost = function(item, currentUser, callback) {
+      item.text = item.text.replace('</script>', '<#script>');
+      return async.parallel({
+        comments: function(cb2) {
+          return db.comment.findItems({
+            p: item._id
+          }, function(err, comments) {
+            return async.forEach(comments, function(comment, cb3) {
+              var date;
+              date = comment.date;
+              comment.date = date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + date.getMinutes();
+              comment.body = comment.body.replace('</script>', '<#script>');
+              return db.user.findOne({
+                _id: comment.u._id
+              }, function(err, user) {
+                comment.u = user;
+                return cb3(err);
+              });
+            }, function(err) {
+              return cb2(err, comments);
+            });
+          });
+        },
+        user: function(cb2) {
+          return db.user.findOne({
+            _id: item.u
+          }, function(err, user) {
+            return cb2(err, user);
+          });
+        },
+        isFav: function(cb2) {
+          return db.fav.findOne({
+            u: currentUser._id,
+            p: item._id
+          }, function(err, fav) {
+            return cb2(err, fav);
+          });
+        }
+      }, function(err, results) {
+        item.comments = results.comments;
+        item.user = results.user;
+        item.isFav = results.isFav != null;
+        return callback(err, item);
+      });
     };
     getFeeds = function(currentUser, lastDt, fn) {
       var count, feeds, hasFeedUsers;
@@ -109,7 +153,7 @@
           var selector;
           if (lastDt) {
             selector = {
-              u_id: {
+              u: {
                 $in: followings
               },
               date: {
@@ -118,7 +162,7 @@
             };
           } else {
             selector = {
-              u_id: {
+              u: {
                 $in: followings
               }
             };
@@ -146,47 +190,11 @@
               feeds.hasMore = results.count > 10;
               posts = results.items;
               return async.forEach(posts, function(item, cb) {
-                return async.parallel({
-                  comments: function(cb2) {
-                    return db.comment.findItems({
-                      p_id: item._id
-                    }, function(err, comments) {
-                      return async.forEach(comments, function(comment, cb3) {
-                        return db.user.findOne({
-                          _id: comment.u._id
-                        }, function(err, user) {
-                          comment.u = user;
-                          return cb3(err);
-                        });
-                      }, function(err) {
-                        return cb2(err, comments);
-                      });
-                    });
-                  },
-                  user: function(cb2) {
-                    return db.user.findOne({
-                      _id: item.u_id
-                    }, function(err, user) {
-                      return cb2(err, user);
-                    });
-                  },
-                  isFav: function(cb2) {
-                    return db.fav.findOne({
-                      u: currentUser._id,
-                      p: item._id
-                    }, function(err, fav) {
-                      return cb2(err, fav);
-                    });
-                  }
-                }, function(err, results) {
-                  item.comments = results.comments;
-                  item.user = results.user;
-                  item.isFav = results.isFav != null;
-                  return cb(err);
+                return getPost(item, currentUser, function(err, post) {
+                  return cb(err, post);
                 });
               }, function(err) {
                 feeds.items = posts;
-                console.log('feed', feeds);
                 fn(feeds);
                 return callback(null, 'done');
               });
@@ -210,7 +218,7 @@
       if (req.currentUser) {
         return getFeeds(req.currentUser, null, function(feeds) {
           return res.render('home', {
-            title: 'home',
+            title: 'SuperSonic',
             posts: feeds,
             user: req.currentUser,
             navLink: 'home',
@@ -228,7 +236,7 @@
         return res.redirect('/');
       } else {
         return res.render('signup', {
-          title: 'signup'
+          title: '注册'
         });
       }
     });
@@ -242,26 +250,26 @@
       if (_user.password === '' || _user.confirm_password === '' || _user.username === '' || _user.email === '') {
         req.flash('error', '字段不能为空');
         return res.render('signup', {
-          title: 'signup'
+          title: '注册'
         });
       }
       if (_user.password.length < 6) {
         req.flash('error', '密码不能少于六位');
         return res.render('signup', {
-          title: 'signup'
+          title: '注册'
         });
       }
       if (_user.password !== _user.confirm_password) {
         req.flash('error', '确认密码与密码不同');
         return res.render('signup', {
-          title: 'signup'
+          title: '注册'
         });
       }
       testReg = /^[\w\.\-\+]+@([\w\-]+\.)+[a-z]{2,4}$/;
       if (!testReg.test(_user.email)) {
         req.flash('error', '邮箱格式不正确');
         return res.render('signup', {
-          title: 'signup'
+          title: '注册'
         });
       }
       _user = new User(_user);
@@ -272,19 +280,18 @@
           if (err.code === 11000) {
             req.flash('error', '用户名已存在');
             return res.render('signup', {
-              title: 'signup'
+              title: '注册'
             });
           } else {
             return next(err);
           }
         } else {
-          console.log('signup', replies);
           req.session.user_id = replies[0]._id;
           return res.redirect('/');
         }
       });
     });
-    app.post('/login', function(req, res) {
+    app.post('/login', function(req, res, next) {
       var _user;
       _user = req.body.user;
       _user.password = _user.password.trim();
@@ -292,7 +299,7 @@
       if (_user.password === '' || _user.username === '') {
         req.flash('error', '字段不能为空');
         return res.render('index', {
-          title: 'index'
+          title: '登录'
         });
       }
       return db.user.findOne({
@@ -336,32 +343,21 @@
         return res.redirect('/');
       }
     });
-    app.get('/post/new', loadUser, function(req, res) {
-      if (req.currentUser) {
-        return res.render('post/new', {
-          title: 'new post',
-          p: {}
-        });
-      } else {
-        return res.redirect('/');
-      }
-    });
     app.get('/settings', loadUser, function(req, res) {
       if (req.currentUser) {
         return res.render('settings', {
-          title: 'settings',
+          title: '设置',
           user: req.currentUser
         });
       } else {
         return res.redirect('/');
       }
     });
-    app.post('/user', loadUser, function(req, res) {
+    app.post('/user', loadUser, function(req, res, next) {
       var _user;
       if (req.currentUser) {
         _user = req.currentUser;
         return req.form.emit('callback', function(err, fields, files) {
-          console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
           if (fields.nick) {
             db.user.update({
               _id: _user._id
@@ -372,6 +368,7 @@
             });
           }
           if (files.avatar.size > 0) {
+            console.log('\nuploaded %s to %s', files.avatar.filename, files.avatar.path);
             return im.identify(files.avatar.path, function(err, features) {
               var cropPath, imageFormats, size;
               imageFormats = ['JPEG', 'PNG', 'GIF'];
@@ -421,7 +418,12 @@
                       });
                     }
                   ], function(err, results) {
-                    return res.redirect('/user/' + _user.username);
+                    if (err) {
+                      return next(err);
+                    } else {
+                      req.flash('info', '用户资料修改成功');
+                      return res.redirect('/user/' + _user.username);
+                    }
                   });
                 });
               } else {
@@ -433,6 +435,7 @@
               }
             });
           } else {
+            req.flash('info', '用户资料修改成功');
             return res.redirect('/user/' + _user.username);
           }
         });
@@ -440,12 +443,15 @@
         return res.redirect('/');
       }
     });
-    app.get('/user/:username', loadUser, function(req, res) {
+    app.get('/user/:username', loadUser, function(req, res, next) {
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
         var localData, page, _currentUser;
-        if (user) {
+        if (err || !(user != null)) {
+          err = err || '没有这个用户';
+          return next(err);
+        } else if (user) {
           page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
             title: user.nick + "的主页",
@@ -468,7 +474,7 @@
               },
               posts: function(callback) {
                 return db.post.find({
-                  u_id: user._id
+                  u: user._id
                 }, {
                   sort: {
                     date: -1
@@ -493,39 +499,8 @@
                     feeds.num_items = results.count;
                     feeds.items = results.items;
                     return async.forEach(feeds.items, function(item, cb) {
-                      return async.parallel({
-                        comments: function(cb2) {
-                          return db.comment.findItems({
-                            p_id: item._id
-                          }, function(err, comments) {
-                            return async.forEach(comments, function(comment, cb3) {
-                              return db.user.findOne({
-                                _id: comment.u._id
-                              }, function(err, user) {
-                                comment.u = user;
-                                return cb3(err);
-                              });
-                            }, function(err) {
-                              return cb2(err, comments);
-                            });
-                          });
-                        },
-                        user: function(cb2) {
-                          return cb2(err, user);
-                        },
-                        isFav: function(cb2) {
-                          return db.fav.findOne({
-                            u: _currentUser._id,
-                            p: item._id
-                          }, function(err, fav) {
-                            return cb2(err, fav);
-                          });
-                        }
-                      }, function(err, results) {
-                        item.comments = results.comments;
-                        item.user = results.user;
-                        item.isFav = results.isFav != null;
-                        return cb(err);
+                      return getPost(item, _currentUser, function(err, post) {
+                        return cb(err, post);
                       });
                     }, function(err) {
                       return callback(err, feeds);
@@ -534,15 +509,115 @@
                 });
               }
             }, function(err, results) {
-              user.isFollowing = results.isFollowing;
-              localData.posts = results.posts;
-              localData.user = _currentUser;
-              localData.isLoggedIn = true;
-              localData.uri = req.url;
-              if (req.currentUser.username === user.username) {
-                localData.navLink = 'user';
+              if (err) {
+                return next(err);
+              } else {
+                user.isFollowing = results.isFollowing;
+                localData.posts = results.posts;
+                localData.user = _currentUser;
+                localData.isLoggedIn = true;
+                localData.uri = req.url;
+                if (req.currentUser.username === user.username) {
+                  localData.navLink = 'user';
+                }
+                return res.render('user', localData);
               }
-              return res.render('user', localData);
+            });
+          } else {
+            return res.render('user', localData);
+          }
+        }
+      });
+    });
+    app.get('/user/:username/fav', loadUser, function(req, res, next) {
+      return db.user.findOne({
+        username: req.params.username
+      }, function(err, user) {
+        var localData, page, _currentUser;
+        if (err || !(user != null)) {
+          err = err || '没有这个用户';
+          return next(err);
+        } else if (user) {
+          page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
+          localData = {
+            title: user.nick + "的收藏",
+            pageUser: user,
+            isLoggedIn: false,
+            page: page,
+            userNav: 'fav'
+          };
+          if (req.currentUser) {
+            _currentUser = req.currentUser;
+            localData.isSelf = _currentUser.username === user.username;
+            return async.parallel({
+              isFollowing: function(callback) {
+                return db.follow.findOne({
+                  from: _currentUser._id,
+                  to: user._id
+                }, function(err, follow) {
+                  return callback(null, follow != null);
+                });
+              },
+              posts: function(callback) {
+                return db.fav.find({
+                  u: user._id
+                }, {
+                  sort: {
+                    date: -1
+                  },
+                  limit: 10,
+                  skip: 10 * (page - 1)
+                }, function(err, cursor) {
+                  return async.parallel({
+                    count: function(cb) {
+                      return cursor.count(function(err, count) {
+                        return cb(err, count);
+                      });
+                    },
+                    items: function(cb) {
+                      return cursor.toArray(function(err, posts) {
+                        return cb(err, posts);
+                      });
+                    }
+                  }, function(err, results) {
+                    var feeds, ids;
+                    feeds = {};
+                    feeds.num_items = results.count;
+                    ids = results.items.map(function(item) {
+                      return item.p;
+                    });
+                    feeds.items = [];
+                    return db.post.findItems({
+                      _id: {
+                        $in: ids
+                      }
+                    }, function(err, posts) {
+                      return async.forEach(posts, function(post, cb) {
+                        return getPost(post, _currentUser, function(err, post) {
+                          return cb(err, post);
+                        });
+                      }, function(err) {
+                        posts.sort(function(x, y) {
+                          return y.date.getTime() - x.date.getTime();
+                        });
+                        feeds.items = posts;
+                        return callback(err, feeds);
+                      });
+                    });
+                  });
+                });
+              }
+            }, function(err, results) {
+              if (err) {
+                return next(err);
+              } else {
+                user.isFollowing = results.isFollowing;
+                localData.posts = results.posts;
+                localData.user = _currentUser;
+                localData.isLoggedIn = true;
+                localData.uri = req.url;
+                return res.render('user', localData);
+              }
             });
           } else {
             return res.render('user', localData);
@@ -552,12 +627,15 @@
         }
       });
     });
-    app.get('/user/:username/following', loadUser, function(req, res) {
+    app.get('/user/:username/following', loadUser, function(req, res, next) {
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
         var localData, page, _currentUser;
-        if (user) {
+        if (err || !(user != null)) {
+          err = err || '没有这个用户';
+          return next(err);
+        } else if (user) {
           page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
             title: user.nick + "的关注",
@@ -598,13 +676,17 @@
                 });
               }
             }, function(err, results) {
-              localData.isSelf = _currentUser.username === user.username;
-              user.isFollowing = results.isFollowing;
-              localData.users = results.users;
-              localData.user = req.currentUser;
-              localData.isLoggedIn = true;
-              localData.uri = req.url;
-              return res.render('follow', localData);
+              if (err) {
+                return next(err);
+              } else {
+                localData.isSelf = _currentUser.username === user.username;
+                user.isFollowing = results.isFollowing;
+                localData.users = results.users;
+                localData.user = req.currentUser;
+                localData.isLoggedIn = true;
+                localData.uri = req.url;
+                return res.render('follow', localData);
+              }
             });
           } else {
             return res.render('follow', localData);
@@ -614,12 +696,15 @@
         }
       });
     });
-    app.get('/user/:username/follower', loadUser, function(req, res) {
+    app.get('/user/:username/follower', loadUser, function(req, res, next) {
       return db.user.findOne({
         username: req.params.username
       }, function(err, user) {
         var localData, page, _currentUser;
-        if (user) {
+        if (err || !(user != null)) {
+          err = err || '没有这个用户';
+          return next(err);
+        } else if (user) {
           page = (req.query.page != null) && !isNaN(req.query.page) ? req.query.page : 1;
           localData = {
             title: user.nick + "的粉丝",
@@ -660,13 +745,17 @@
                 });
               }
             }, function(err, results) {
-              localData.isSelf = _currentUser.username === user.username;
-              user.isFollowing = results.isFollowing;
-              localData.users = results.users;
-              localData.user = req.currentUser;
-              localData.isLoggedIn = true;
-              localData.uri = req.url;
-              return res.render('follow', localData);
+              if (err) {
+                return next(err);
+              } else {
+                localData.isSelf = _currentUser.username === user.username;
+                user.isFollowing = results.isFollowing;
+                localData.users = results.users;
+                localData.user = req.currentUser;
+                localData.isLoggedIn = true;
+                localData.uri = req.url;
+                return res.render('follow', localData);
+              }
             });
           } else {
             return res.render('follow', localData);
@@ -676,7 +765,7 @@
         }
       });
     });
-    app.put('/follow/:id', loadUser, function(req, res) {
+    app.put('/follow/:id', loadUser, function(req, res, next) {
       var currentUser;
       if (req.currentUser) {
         currentUser = req.currentUser;
@@ -718,10 +807,9 @@
                     });
                   }
                 ], function(err, results) {
-                  if (err != null) {
-                    return res.send(err);
+                  if (err) {
+                    return next;
                   } else {
-                    console.log('follow', results);
                     return res.send('success');
                   }
                 });
@@ -735,7 +823,7 @@
         return res.send('error');
       }
     });
-    app.put('/unfollow/:id', loadUser, function(req, res) {
+    app.put('/unfollow/:id', loadUser, function(req, res, next) {
       var currentUser;
       if (req.currentUser) {
         currentUser = req.currentUser;
@@ -746,7 +834,7 @@
               to: user._id
             }, function(err, follow) {
               if ((err != null)) {
-                return res.send(err);
+                return next(err);
               } else {
                 return async.parallel([
                   function(callback) {
@@ -772,9 +860,8 @@
                   }
                 ], function(err, results) {
                   if (err != null) {
-                    return res.send(err);
+                    return next(err);
                   } else {
-                    console.log('unfollow', results);
                     return res.send('success');
                   }
                 });
@@ -788,11 +875,11 @@
         return res.send('error');
       }
     });
-    app.post('/comment', loadUser, function(req, res) {
+    app.post('/comment', loadUser, function(req, res, next) {
       var comment, _user;
       _user = req.currentUser;
       comment = {
-        p_id: db.comment.id(req.body.id),
+        p: db.comment.id(req.body.id),
         body: req.body.body,
         time: req.body.time,
         date: new Date(),
@@ -801,27 +888,97 @@
         }
       };
       return db.comment.insert(comment, function(err, replies) {
-        replies[0].u = _user;
-        return res.send(replies[0]);
+        var date;
+        if (err) {
+          return next(err);
+        } else {
+          replies[0].u = _user;
+          date = replies[0].date;
+          replies[0].date = date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + date.getMinutes();
+          return res.send(replies[0]);
+        }
       });
     });
-    app.del('/post/:id.:format?', loadUser, function(req, res) {
-      return db.post.removeById(req.params.id, function(err, p) {
-        db.comment.remove({
-          p_id: db.comment.id(req.params.id)
-        }, function(err, comment) {
-          return console.log('delete comment', comment);
-        });
-        db.user.updateById(req.currentUser._id.toString(), {
-          '$inc': {
-            num_posts: -1
-          }
-        });
-        audioFS.unlink(req.params.id, function(err) {});
-        return res.send('1');
+    app.del('/post/:id.:format?', loadUser, function(req, res, next) {
+      var p_id;
+      p_id = req.params.id;
+      return async.parallel({
+        post: function(cb) {
+          return db.post.removeById(p_id, function(err) {
+            return cb(err);
+          });
+        },
+        comment: function(cb) {
+          return db.comment.remove({
+            p: db.comment.id(p_id)
+          }, function(err) {
+            return cb(err);
+          });
+        },
+        userCount: function(cb) {
+          return db.user.updateById(req.currentUser._id.toString(), {
+            '$inc': {
+              num_posts: -1
+            }
+          }, function(err) {
+            return cb(err);
+          });
+        },
+        audio: function(cb) {
+          return audioFS.unlink(p_id, function(err) {
+            return cb(err);
+          });
+        },
+        waveform: function(cb) {
+          return wfFS.unlink(p_id, function(err) {
+            return cb(err);
+          });
+        },
+        fav: function(cb) {
+          return db.fav.findItems({
+            p: db.fav.id(p_id)
+          }, function(err, favs) {
+            if (favs.length) {
+              return async.forEach(favs, function(item, cb2) {
+                return async.parallel({
+                  fav: function(cb3) {
+                    return db.fav.remove({
+                      p: item.p
+                    }, function(err) {
+                      return cb3(err);
+                    });
+                  },
+                  userCount: function(cb3) {
+                    return db.user.update({
+                      _id: item.u
+                    }, {
+                      $inc: {
+                        num_fav: -1
+                      }
+                    }, function(err) {
+                      return cb3(err);
+                    });
+                  }
+                }, function(err, result) {
+                  return cb2(err);
+                });
+              }, function(err) {
+                return cb(err);
+              });
+            } else {
+              return cb(null);
+            }
+          });
+        }
+      }, function(err, results) {
+        if (err) {
+          return next(err);
+        } else {
+          return res.send('1');
+        }
       });
     });
-    app.post('/post/fav/:id', loadUser, function(req, res) {
+    app.post('/post/fav/:id', loadUser, function(req, res, next) {
       return db.fav.insert({
         p: db.post.id(req.params.id),
         u: req.currentUser._id
@@ -856,12 +1013,16 @@
               });
             }
           ], function(err, result) {
-            return res.send('1');
+            if (err) {
+              return next(err);
+            } else {
+              return res.send('1');
+            }
           });
         }
       });
     });
-    app.del('/post/fav/:id', loadUser, function(req, res) {
+    app.del('/post/fav/:id', loadUser, function(req, res, next) {
       var selector;
       selector = {
         p: db.post.id(req.params.id),
@@ -891,7 +1052,11 @@
                 });
               }
             ], function(err, result) {
-              return res.send('1');
+              if (err) {
+                return next(err);
+              } else {
+                return res.send('1');
+              }
             });
           });
         } else {
@@ -899,30 +1064,45 @@
         }
       });
     });
-    app.get('/audio/:id.:format', function(req, res) {
+    app.get('/audio/:id.:format', function(req, res, next) {
       return audioFS.stream(req.params.id, function(err, stream) {
-        res.contentType('audio/' + req.params.format);
-        return stream.pipe(res);
+        if (err) {
+          return next(err);
+        } else {
+          res.contentType('audio/' + req.params.format);
+          return stream.pipe(res);
+        }
       });
     });
-    app.get('/waveform/:id', function(req, res) {
+    app.get('/waveform/:id', function(req, res, next) {
       return wfFS.stream(req.params.id, function(err, stream) {
-        res.contentType('audio/png');
-        return stream.pipe(res);
+        if (err) {
+          return next(err);
+        } else {
+          res.contentType('audio/png');
+          return stream.pipe(res);
+        }
       });
     });
-    return app.get('/avatar/:id/:ver', function(req, res) {
+    app.get('/avatar/:id/:ver', function(req, res, next) {
       var size, _filename;
       size = req.query.size;
       if (size === '32' || size === '48' || size === '128') {
         _filename = req.params.id + '_' + size;
         return avatarFS.stream(_filename, function(err, stream) {
-          res.contentType('image/jpeg');
-          return stream.pipe(res);
+          if (err) {
+            return next(err);
+          } else {
+            res.contentType('image/jpeg');
+            return stream.pipe(res);
+          }
         });
       } else {
         return res.end('size should be 32, 48, 128');
       }
+    });
+    return app.get('/android-client', function(req, res, next) {
+      return res.sendfile('public/download/supersonic.apk');
     });
   };
   exports.route = route;

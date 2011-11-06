@@ -76,17 +76,18 @@ start = (app) ->
                     return res.send {error: 'the file format is not supported'}
                 post =
                     text: fields.text
-                    u_id: _user._id
+                    u: _user._id
                     format: format,
                     time: parseInt(fields.time),
                     date: new Date(),
                     num_favs: 0
 
+                console.log 'post', post
                 db.post.insert post, (err, replies) ->
                     console.log 'post success', replies
                     async.parallel
                         user: (cb)->
-                            db.user.updateById post.u_id.toString(), {'$inc': {num_posts: 1}}, (err, result)->
+                            db.user.updateById post.u.toString(), {'$inc': {num_posts: 1}}, (err, result)->
                                 cb err, result
                         audio: (cb)->
                             audioFS.writeFile replies[0]._id.toString(), files.audio.path, (err, result) ->
@@ -105,10 +106,5 @@ start = (app) ->
                 fs.unlink files.audio.path, (err) ->
                     console.log 'successfully deleted %s', files.audio.path
             unAuthorized res
-
-    # app.get '/api/document/list.json', (req, res) ->
-    #     httpAuthUser req, res, app, (authedUser) ->
-    #         app.documentProvider.list {u_id: authedUser._id}, (err, documents) ->
-    #             res.send documents
 
 exports.start = start

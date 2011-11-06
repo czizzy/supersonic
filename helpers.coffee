@@ -11,19 +11,14 @@ class FlashMessage
         @type = type
         @messages = messages
 
-    icon: ->
-        switch @type
-            when 'info' then 'ui-icon-info'
-            else 'ui-icon-alert'
     stateClass: ->
         switch @type
-            when 'info' then 'ui-state-highlight'
-            else 'ui-state-error'
+            when 'info' then 'success'
+            else 'error'
     toHTML: ->
-         '<div class="ui-widget flash">' +
-          '<div class="' + @stateClass() + ' ui-corner-all">' +
-          '<p><span class="ui-icon ' + @icon() + '"></span>' + @messages.join(', ') + '</p>' +
-          '</div></div>'
+          '<div class="alert-box ' + @stateClass() + '">' +
+          @messages.join(', ') +
+          '</div>'
 
 exports.dynamicHelpers = {
   flashMessages: (req, res) ->

@@ -12,24 +12,16 @@
       this.type = type;
       this.messages = messages;
     }
-    FlashMessage.prototype.icon = function() {
-      switch (this.type) {
-        case 'info':
-          return 'ui-icon-info';
-        default:
-          return 'ui-icon-alert';
-      }
-    };
     FlashMessage.prototype.stateClass = function() {
       switch (this.type) {
         case 'info':
-          return 'ui-state-highlight';
+          return 'success';
         default:
-          return 'ui-state-error';
+          return 'error';
       }
     };
     FlashMessage.prototype.toHTML = function() {
-      return '<div class="ui-widget flash">' + '<div class="' + this.stateClass() + ' ui-corner-all">' + '<p><span class="ui-icon ' + this.icon() + '"></span>' + this.messages.join(', ') + '</p>' + '</div></div>';
+      return '<div class="alert-box ' + this.stateClass() + '">' + this.messages.join(', ') + '</div>';
     };
     return FlashMessage;
   })();

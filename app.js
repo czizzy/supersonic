@@ -79,9 +79,9 @@
     return console.log('user index username', err);
   });
   db.comment.ensureIndex({
-    'p_id': 1
+    'p': 1
   }, false, function(err) {
-    return console.log('comment index p_id', err);
+    return console.log('comment index p', err);
   });
   db.post.ensureIndex({
     date: -1,
@@ -99,6 +99,11 @@
     to: 1
   }, false, function(err) {
     return console.log('follow index to');
+  });
+  db.fav.ensureIndex({
+    p: 1
+  }, false, function(err) {
+    return console.log('fav index');
   });
   db.fav.ensureIndex({
     u: 1,

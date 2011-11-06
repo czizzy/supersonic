@@ -103,17 +103,18 @@
           }
           post = {
             text: fields.text,
-            u_id: _user._id,
+            u: _user._id,
             format: format,
             time: parseInt(fields.time),
             date: new Date(),
             num_favs: 0
           };
+          console.log('post', post);
           return db.post.insert(post, function(err, replies) {
             console.log('post success', replies);
             return async.parallel({
               user: function(cb) {
-                return db.user.updateById(post.u_id.toString(), {
+                return db.user.updateById(post.u.toString(), {
                   '$inc': {
                     num_posts: 1
                   }

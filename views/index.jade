@@ -1,7 +1,7 @@
 extends body
 block body
 	#form-container
-		p#slog 在这里，你可以分享你身边的声音
+		p#slog 登录
 		form.verify-form(method='post', action='/login')
 			p
 				label(for="username") 用户名:
@@ -12,7 +12,7 @@ block body
 				input#password(type='password', name='user[password]', required)
 				span
 			p
-				label(for='remember_me') 下次自动登录:
+				label.remember(for='remember_me') 下次自动登录:
 				input#remember_me(type='checkbox', name='remember_me', checked)
 			p
 				input.button(type='submit', value='登录')

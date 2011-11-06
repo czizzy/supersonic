@@ -7,11 +7,11 @@ exports.config =
     #     password: '2r01a5ox45o'
     #     port: 20088
     # port:80
-    env: 'development'
+    env: 'production'
     mongo:
         dbname: 'supersonic'
         host: '127.0.0.1'
         account: '',
         password: ''
         port: 27017
-    port:3000
+    port:80

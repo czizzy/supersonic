@@ -38,10 +38,6 @@ class GridFS
         gridStore = new GridStore db, filename, "r", _options
         gridStore.open (err, gridStore) ->
             fileStream = gridStore.stream(true)
-            fileStream.on 'error', (error) ->
-                console.log 'error', error
-            fileStream.on 'end', (end) ->
-                console.log 'end'
             cb(err, fileStream)
 
     exist: (filename, cb) ->

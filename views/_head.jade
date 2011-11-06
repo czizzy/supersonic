@@ -12,20 +12,19 @@ header
 					li 
 						a(href="/settings") 设置
 					li
-						a(href="/logout") 登出
+						a(href="/logout") 退出
 				- else 
 					li
 						a(href="/signup") 注册
 nav
-	#navigator
-		ul
-			- if (typeof user !== 'undefined')
-				li(class=(typeof navLink !== 'undefined' && navLink == 'home')?'active':'')
-					a(href="/")
-						span 首页
-				li(class=(typeof navLink !== 'undefined' && navLink == 'user')?'active':'')
-					a(href="/user/#{user.username}")
-						span 个人主页
+	dl.tabs.nice
+		- if (typeof user !== 'undefined')
+			dd
+				a(href="/", class=(typeof navLink !== 'undefined' && navLink == 'home')?'active':'')
+					span 首页
+			dd
+				a(href="/user/#{user.username}", class=(typeof navLink !== 'undefined' && navLink == 'user')?'active':'')
+					span 个人主页
 			//li(class=(typeof navLink !== 'undefined' && navLink == 'explore')?'active':'')
 			//	a(href="/explore')
 			//			span 发现

@@ -34,7 +34,7 @@ ul#user-nav.clearfix
 	- else 
 		li 
 			a(href="/user/#{pageUser.username}/follower") 粉丝 (#{pageUser.num_follower})
-	- if(userNav == 'nav')
+	- if(userNav == 'fav')
 		li.active 
 			span 收藏 (#{pageUser.num_fav})
 	- else 
