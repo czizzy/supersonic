@@ -23,7 +23,7 @@ $(function(){
 			if (val == "") return true;
             var teststr = /^[a-zA-Z0-9一-龥][a-zA-Z0-9一-龥_.]*$/;
 			return teststr.test(val);
-			},  'errorTip':"用户名中不能包含特殊字符"}], 6, "昵称太长", -1, "");
+			},  'errorTip':"用户名中不能包含特殊字符"}], 12, "昵称太长", -1, "");
 	$(".verify-form").submit(function(){
 		if ($(".col-error").length > 0) {
 			$(".col-error").fadeOut(200, function(){$(this).fadeIn(200);}).parent().fadeOut(200, function(){$(this).fadeIn(200);});
