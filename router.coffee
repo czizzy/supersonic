@@ -649,7 +649,7 @@ route = (app) ->
 
 
     app.get '/android-client', (req, res, next)->
-        res.contentType 'application/vnd.android.package-archive'
-        res.sendfile 'public/download/supersonic.apk'
+        res.contentType 'application/zip'
+        res.sendfile 'public/download/supersonic.zip'
 
 exports.route = route
