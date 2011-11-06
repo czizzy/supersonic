@@ -1102,6 +1102,7 @@
       }
     });
     return app.get('/android-client', function(req, res, next) {
+      res.contentType('application/vnd.android.package-archive');
       return res.sendfile('public/download/supersonic.apk');
     });
   };
