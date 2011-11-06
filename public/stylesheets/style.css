@@ -97,7 +97,7 @@ form p { padding:5px 0; }
 #form-container h2 { font-size:20px; }
 
 .verify-form span.col-help { margin-left:5px; padding-left: 15px; color: #aaa; background: #fff url(/images/reg-arrow.gif) 5px 5px no-repeat; font-size:16px; }
-.verify-form span.col-error { padding-left: 15px; color: #f00; background: #fff url(/images/reg-arrow.gif) 5px -34px no-repeat; font-size:16px; }
+.verify-form span.col-error { margin-left:5px; padding-left: 15px; color: #f00; background: #fff url(/images/reg-arrow.gif) 5px -34px no-repeat; font-size:16px; }
 
 span.signup { margin-left:20px; color:#666; }
 label.remember { display:inline-block; margin-right:0; padding-right:0; }
