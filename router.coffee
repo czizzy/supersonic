@@ -648,8 +648,8 @@ route = (app) ->
         else res.end 'size should be 32, 48, 128'
 
 
-    app.get '/android-client', (req, res, next)->
-        res.contentType 'application/zip'
-        res.sendfile 'public/download/supersonic.zip'
+    app.get '/android-client.apk', (req, res, next)->
+        res.contentType 'application/vnd.android.package-archive'
+        res.sendfile 'public/download/supersonic.apk'
 
 exports.route = route
