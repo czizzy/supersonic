@@ -73,7 +73,7 @@ ul.pagination { display:none; }
 #user-content .actions { margin-top:10px; }
 
 /* follow */
-#user-list li { float:left; width:445px; padding:5px 10px; border-bottom:1px solid #ddd; }
+#user-list li { float:left; width:410px; padding:5px 10px; border-bottom:1px solid #ddd; }
 #user-list img.avatar { float:left; width:48px; height:48px; }
 #user-list .nick { float:left; margin-left:10px; font-size:16px; line-height:48px; }
 #user-list .button { float:right; position:relative; top:7px; }
