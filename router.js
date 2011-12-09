@@ -7,11 +7,13 @@
   fs = require('fs');
   async = require('async');
   route = function(app) {
-    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getPost, getUser, loadUser, wfFS;
+    var audioFS, authenticateFromLoginToken, avatarFS, db, getFeeds, getPost, getUser, loadUser, socketClients, sockets, wfFS;
     db = app.db;
     avatarFS = app.avatarFS;
     audioFS = app.audioFS;
     wfFS = app.wfFS;
+    socketClients = app.clients;
+    sockets = app.io.sockets.sockets;
     authenticateFromLoginToken = function(req, res, next) {
       var cookie;
       cookie = JSON.parse(req.cookies.logintoken);
@@ -887,17 +889,40 @@
           _id: _user._id
         }
       };
-      return db.comment.insert(comment, function(err, replies) {
-        var date;
-        if (err) {
-          return next(err);
-        } else {
-          replies[0].u = _user;
-          date = replies[0].date;
-          replies[0].date = date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + date.getMinutes();
-          return res.send(replies[0]);
+      return async.waterfall([
+        function(callback) {
+          return db.post.findOne({
+            _id: comment.p
+          }, function(err, post) {
+            return callback(err, post);
+          });
+        }, function(post, callback) {
+          return db.comment.insert(comment, function(err, replies) {
+            return callback(err, post, replies[0]);
+          });
+        }, function(post, comment, callback) {
+          var notification;
+          notification = {
+            from: _user._id,
+            to: post.u,
+            type: 'comment',
+            n: comment._id,
+            c: new Date()
+          };
+          return db.notification.insert(notification, function(err, replies) {
+            var clientId, date;
+            if (post.u.toString() !== _user._id.toString() && (clientId = socketClients[post.u.toString()])) {
+              if (sockets[clientId]) {
+                sockets[clientId].emit('comment', comment.body);
+              }
+            }
+            comment.u = _user;
+            date = comment.date;
+            comment.date = date.getFullYear() + '-' + (date.getMonth() + 1) + '-' + date.getDate() + ' ' + date.getHours() + ':' + date.getMinutes();
+            return res.send(comment);
+          });
         }
-      });
+      ]);
     });
     app.del('/post/:id.:format?', loadUser, function(req, res, next) {
       var p_id;
@@ -1101,9 +1126,15 @@
         return res.end('size should be 32, 48, 128');
       }
     });
-    return app.get('/android-client.apk', function(req, res, next) {
+    app.get('/android-client.apk', function(req, res, next) {
       res.contentType('application/vnd.android.package-archive');
       return res.sendfile('public/download/supersonic.apk');
+    });
+    return app.get('*', function(req, res, next) {
+      return res.render('404', {
+        title: '404',
+        status: 404
+      });
     });
   };
   exports.route = route;

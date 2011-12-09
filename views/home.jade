@@ -1,12 +1,14 @@
 extends body
 block body
-	div#posts-content
-		ul#posts
-	!=partial('templates/post')
+    div#posts-content
+        ul#posts
+    !=partial('templates/post')
 block scripts
-	script(src="/javascripts/spin.min.js")
-	script(src="/javascripts/jquery.bubblepopup.v2.3.1.min.js")
-	script(src="/javascripts/application.js")
-	script(src="/javascripts/soundmanager2.js")
-	script(type='text/javascript')
-		postsJSON = !{JSON.stringify(posts)}
+    script(src="/javascripts/spin.min.js")
+    script(src="/javascripts/jquery.bubblepopup.v2.3.1.min.js")
+    script(src="/javascripts/application.js")
+    script(src="/javascripts/soundmanager2.js")
+    script(type='text/javascript')
+        postsJSON = !{JSON.stringify(posts)}
+    script(src="/socket.io/socket.io.js")
+    script(src="/javascripts/socket.js")    

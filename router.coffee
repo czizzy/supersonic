@@ -10,6 +10,8 @@ route = (app) ->
     avatarFS = app.avatarFS
     audioFS = app.audioFS
     wfFS = app.wfFS
+    socketClients = app.clients
+    sockets = app.io.sockets.sockets
 
     authenticateFromLoginToken = (req, res, next) ->
         cookie = JSON.parse(req.cookies.logintoken)
@@ -524,14 +526,29 @@ route = (app) ->
             date: new Date()
             u:
                 _id: _user._id
-        db.comment.insert comment, (err, replies) ->
-            if(err)
-                next err
-            else
-                replies[0].u = _user
-                date = replies[0].date
-                replies[0].date = date.getFullYear()+'-'+(date.getMonth()+1)+'-'+date.getDate()+' '+date.getHours()+':'+date.getMinutes()
-                res.send replies[0]
+        async.waterfall [
+            (callback)->
+                db.post.findOne {_id: comment.p}, (err, post) ->
+                    callback err, post
+            , (post, callback)->
+                db.comment.insert comment, (err, replies) ->
+                    callback err, post, replies[0]
+            , (post, comment, callback) ->
+                notification =
+                    from : _user._id
+                    to : post.u
+                    type: 'comment'
+                    n : comment._id
+                    c : new Date()
+                db.notification.insert notification, (err, replies)->
+                    if(post.u.toString() != _user._id.toString() && clientId = socketClients[post.u.toString()])
+                        if(sockets[clientId])
+                            sockets[clientId].emit 'comment', comment.body
+                    comment.u = _user
+                    date = comment.date
+                    comment.date = date.getFullYear()+'-'+(date.getMonth()+1)+'-'+date.getDate()+' '+date.getHours()+':'+date.getMinutes()
+                    res.send comment
+        ]
 
     app.del '/post/:id.:format?', loadUser, (req, res, next) ->
         p_id = req.params.id
@@ -651,5 +668,8 @@ route = (app) ->
     app.get '/android-client.apk', (req, res, next)->
         res.contentType 'application/vnd.android.package-archive'
         res.sendfile 'public/download/supersonic.apk'
+
+    app.get '*', (req, res, next)->
+        res.render '404', {title: '404', status: 404}
 
 exports.route = route
