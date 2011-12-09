@@ -59,6 +59,10 @@
     app.use(express.methodOverride());
     app.use(express.static(__dirname + '/public'));
     app.use(app.router);
+    app.use(express.errorHandler({
+      dumpExceptions: true,
+      showStack: true
+    }));
     return app.use(function(err, req, res, next) {
       console.log('handle err', err);
       return res.render('500.jade', {

@@ -45,6 +45,7 @@ app.configure () ->
     app.use(express.methodOverride())
     app.use(express.static(__dirname + '/public'))
     app.use(app.router)
+    app.use express.errorHandler {dumpExceptions: true, showStack: true}
     # error handling
     app.use (err, req, res, next) ->
         console.log 'handle err', err

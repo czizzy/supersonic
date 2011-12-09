@@ -19,16 +19,14 @@
         });
       });
     });
-    io.sockets.on('error', function(reason) {
-      return console.log('socket.io error:', reason);
-    });
-    return io.sockets.on('connection', function(socket) {
+    io.sockets.on('connection', function(socket) {
       app.clients[socket.handshake.user_id] = socket.id;
       return socket.on('disconnect', function(a) {
-        delete app.clients[socket.handshake.user_id];
-        console.log('clients', app.clients);
-        return console.log('disconnect', a);
+        return delete app.clients[socket.handshake.user_id];
       });
+    });
+    return io.sockets.on('error', function(reason) {
+      return console.log('socket.io error:', reason);
     });
   };
   exports.listen = listen;

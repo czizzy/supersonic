@@ -55,6 +55,7 @@ route = (app) ->
     loadUser = (req, res, next) ->
         console.log 'load session', req.session.user_id
         console.log 'load cookie', req.cookies.logintoken
+        console.log 'form', req.form
         if req.form?
             req.form.complete (err, fields, files) ->
                 req.form.on 'callback', (fn) ->
