@@ -85,6 +85,12 @@
   socketio.listen(app);
   router.route(app);
   api.start(app);
+  app.get('*', function(req, res, next) {
+    return res.render('404', {
+      title: '404',
+      status: 404
+    });
+  });
   app.settings.env = configArgs.env;
   app.listen(configArgs.port);
   console.log("Express server listening on port %d in %s mode", app.address().port, app.settings.env);

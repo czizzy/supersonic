@@ -1127,15 +1127,9 @@
         return res.end('size should be 32, 48, 128');
       }
     });
-    app.get('/android-client.apk', function(req, res, next) {
+    return app.get('/android-client.apk', function(req, res, next) {
       res.contentType('application/vnd.android.package-archive');
       return res.sendfile('public/download/supersonic.apk');
-    });
-    return app.get('*', function(req, res, next) {
-      return res.render('404', {
-        title: '404',
-        status: 404
-      });
     });
   };
   exports.route = route;

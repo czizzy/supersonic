@@ -670,7 +670,4 @@ route = (app) ->
         res.contentType 'application/vnd.android.package-archive'
         res.sendfile 'public/download/supersonic.apk'
 
-    app.get '*', (req, res, next)->
-        res.render '404', {title: '404', status: 404}
-
 exports.route = route

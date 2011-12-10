@@ -90,6 +90,8 @@ router.route app
 # api
 api.start app
 
+app.get '*', (req, res, next)->
+    res.render '404', {title: '404', status: 404}
 
 app.settings.env = configArgs.env
 app.listen(configArgs.port)
